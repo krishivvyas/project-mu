@@ -9,10 +9,11 @@
 </div>
 
 > [!NOTE]
-> **Status: early.** The build pipeline is complete and tested locally. The
-> privacy patch set is still being written (see the [Roadmap](#roadmap)). Until
-> it lands, CI produces an unbranded, Google-free-API-key build of stock
-> Chromium. It is not yet a privacy browser.
+> **Status: early.** The build pipeline and the first three privacy patches are
+> written and verified to apply cleanly to Chromium 156.0.8078.12. They have
+> not yet been through a full CI compile. See
+> [What Mu changes today](#what-mu-changes-today) for exactly what is and isn't
+> covered.
 
 ---
 
@@ -28,6 +29,23 @@ as a security checklist.
 | **Ma 間**: negative space | No news feeds, weather widgets, shopping tiles or sync badges. The chrome steps back so the page can breathe. |
 | **Ichi-go ichi-e 一期一会**: one time, one meeting | Every session is a single, unrepeatable encounter. Closing the window doesn't "clear data". The session dissolves. |
 | **Shibui 渋い**: quiet restraint | Not the purple incognito theme, and not a neon gamer dark mode. Sumi ink and washi paper (see [Design system](#design-system)). |
+
+### What Mu changes today
+
+Each patch changes a **default**, so every setting can still be changed in
+Settings. Most are the same settings an enterprise policy controls, which
+upstream Chromium already tests.
+
+| Patch | Effect |
+|---|---|
+| `0001` default search | DuckDuckGo is the default search engine in every region. The New Tab page stays local, so opening a tab makes no request to the search engine. |
+| `0002` no history | Page visits are not written to the History database (the `SavingBrowserHistoryDisabled` mechanism). |
+| `0003` Google services off | No browser sign-in prompts, no Google Translate offers, no preloading or prefetching, and metrics reporting off regardless of installer consent. |
+
+Not covered yet: cookies, site data, cache and the downloads list still persist
+between sessions until the clear-on-exit patch lands. Safe Browsing is left at
+Chromium's default because it protects against phishing and malware. Note that
+Safe Browsing needs Google API keys, and Mu ships without them.
 
 ### What Mu is not
 
@@ -83,6 +101,9 @@ project-mu/
 │   ├── build-chromium.yml   # orchestrator: resolve version, 8 chained stages, release
 │   └── build-stage.yml      # one ~6 h stage: sync/restore, compile, package or hand off
 ├── patches/
+│   ├── 0001-default-search-duckduckgo.patch
+│   ├── 0002-disable-history-by-default.patch
+│   ├── 0003-strip-google-telemetry.patch
 │   └── patch_order.list     # which .patch files apply, in order
 ├── scripts/
 │   ├── fetch_upstream.py    # resolve the latest version; download the source tarball
@@ -238,11 +259,12 @@ like ink dissolving, not like "Closing 12 tabs…".
 | ✅ | Upstream version resolver and verified tarball fetcher |
 | ✅ | Patch engine with revert, re-sync and failure diagnostics |
 | ✅ | Staged Windows CI and automatic GitHub Releases |
-| ⬜ | `0001` DuckDuckGo as the default search engine |
-| ⬜ | `0002` history saving off by default |
-| ⬜ | `0003` remove Google telemetry, sync and sign-in surfaces |
+| ✅ | `0001` DuckDuckGo as the default search engine, local New Tab page |
+| ✅ | `0002` history saving off by default |
+| ✅ | `0003` sign-in, Translate, preloading and metrics off by default |
+| ⬜ | First full CI build with the patch set |
 | ⬜ | Sumi/Washi theme and a minimal New Tab page |
-| ⬜ | Clear all data on exit, with the Inkan purge micro-interaction |
+| ⬜ | Clear cookies and site data on exit, with the Inkan purge micro-interaction |
 | ⬜ | Mu branding (name, icons, `mu.exe`) |
 
 ---

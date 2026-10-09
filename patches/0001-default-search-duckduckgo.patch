@@ -1,0 +1,49 @@
+Project Mu: make DuckDuckGo the default search engine
+
+GetPrepopulatedFallbackSearch() picks the default engine for profiles that
+have not chosen one. Upstream looks up Google; Mu looks up DuckDuckGo, using
+its built-in definition when a region's engine list does not include it.
+
+DuckDuckGo's engine data carries a new_tab_url, which would make every new
+tab load https://duckduckgo.com/chrome_newtab. On desktop the New Tab page is
+kept local instead (chrome://new-tab-page-third-party).
+
+diff --git a/chrome/browser/search/search.cc b/chrome/browser/search/search.cc
+index 6d3e318..f1405c3 100644
+--- a/chrome/browser/search/search.cc
++++ b/chrome/browser/search/search.cc
+@@ -208,6 +208,11 @@ struct NewTabURLDetails {
+     GURL search_provider_url(template_url->new_tab_url_ref().ReplaceSearchTerms(
+         TemplateURLRef::SearchTermsArgs(std::u16string()),
+         UIThreadSearchTermsData()));
++#if !BUILDFLAG(IS_ANDROID)
++    // Project Mu: never load a search provider's remote New Tab page. The New
++    // Tab page stays local, so opening a tab makes no network request.
++    search_provider_url = GURL();
++#endif
+ 
+     if (!search_provider_url.is_valid()) {
+       return NewTabURLDetails(local_url, NEW_TAB_URL_NOT_SET);
+diff --git a/components/search_engines/template_url_prepopulate_data.cc b/components/search_engines/template_url_prepopulate_data.cc
+index 85b0c96..379c2e5 100644
+--- a/components/search_engines/template_url_prepopulate_data.cc
++++ b/components/search_engines/template_url_prepopulate_data.cc
+@@ -317,9 +317,15 @@ std::unique_ptr<TemplateURLData> GetPrepopulatedFallbackSearch(
+     PrefService& prefs,
+     const std::vector<raw_ptr<const PrepopulatedEngine>>&
+         regional_prepopulated_engines) {
+-  return FindPrepopulatedEngineInternal(prefs, regional_prepopulated_engines,
+-                                        google.id,
+-                                        /*use_first_as_fallback=*/true);
++  // Project Mu: DuckDuckGo is the default search engine in every region. Use
++  // the regional entry when there is one, otherwise the built-in definition.
++  // Users can still pick another engine in settings.
++  if (std::unique_ptr<TemplateURLData> engine = FindPrepopulatedEngineInternal(
++          prefs, regional_prepopulated_engines, duckduckgo.id,
++          /*use_first_as_fallback=*/false)) {
++    return engine;
++  }
++  return PrepopulatedEngineToTemplateURLData(&duckduckgo);
+ }
+ 
+ }  // namespace TemplateURLPrepopulateData

@@ -1,0 +1,21 @@
+Project Mu: do not save browsing history by default
+
+Flips the default of history.saving_disabled, the pref behind the
+SavingBrowserHistoryDisabled enterprise policy. While it is set,
+HistoryServiceFactory returns no service for implicit access, so page visits
+are never written to the History database.
+
+diff --git a/chrome/browser/profiles/profile_impl.cc b/chrome/browser/profiles/profile_impl.cc
+index 81e83a8..ddb3b38 100644
+--- a/chrome/browser/profiles/profile_impl.cc
++++ b/chrome/browser/profiles/profile_impl.cc
+@@ -401,7 +401,8 @@ std::unique_ptr<Profile> Profile::CreateProfile(const base::FilePath& path,
+ // static
+ void ProfileImpl::RegisterProfilePrefs(
+     user_prefs::PrefRegistrySyncable* registry) {
+-  registry->RegisterBooleanPref(prefs::kSavingBrowserHistoryDisabled, false);
++  // Project Mu: browsing history is not saved unless the user turns it on.
++  registry->RegisterBooleanPref(prefs::kSavingBrowserHistoryDisabled, true);
+   registry->RegisterBooleanPref(prefs::kAllowDeletingBrowserHistory, true);
+   registry->RegisterBooleanPref(policy::policy_prefs::kForceGoogleSafeSearch,
+                                 false);
