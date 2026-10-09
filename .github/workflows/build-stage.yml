@@ -1,0 +1,183 @@
+# Project Mu (無) — one stage of the Chromium build.
+#
+# Called by build-chromium.yml. Stage 1 checks out Chromium, applies the Mu
+# patches and generates the build; later stages restore the previous stage's
+# half-built tree. Every stage compiles until its time budget runs out, then
+# either packages the finished browser or hands its state to the next stage.
+
+name: Build stage
+
+on:
+  workflow_call:
+    inputs:
+      stage:
+        description: Stage number (1 = fresh checkout)
+        type: number
+        required: true
+      version:
+        description: Chromium version tag
+        type: string
+        required: true
+      workdir:
+        description: Build folder chosen by stage 1 (must be identical in every stage)
+        type: string
+        required: false
+        default: ''
+      last:
+        description: Fail instead of handing off if the build is still unfinished
+        type: boolean
+        required: false
+        default: false
+    outputs:
+      done:
+        description: "'true' once the browser is built and packaged"
+        value: ${{ jobs.build.outputs.done }}
+      workdir:
+        description: Build folder used by this stage
+        value: ${{ jobs.build.outputs.workdir }}
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Stage ${{ inputs.stage }}
+    runs-on: windows-2025-vs2026
+    timeout-minutes: 355
+    outputs:
+      done: ${{ steps.compile.outputs.done }}
+      workdir: ${{ steps.workdir.outputs.path }}
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      DEPOT_TOOLS_WIN_TOOLCHAIN: '0'
+      PYTHONUNBUFFERED: '1'
+      PYTHONUTF8: '1'
+      MU_VERSION: ${{ inputs.version }}
+    steps:
+      - name: Plan time budget
+        id: plan
+        env:
+          STAGE: ${{ inputs.stage }}
+        run: |
+          $start = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
+          # Compile until 290 min after job start; the remaining ~65 min of the
+          # 355 min job limit is for packing and uploading the build state.
+          "deadline=$($start + 290 * 60)" >> $env:GITHUB_OUTPUT
+          "state_in=mu-state-${{ github.run_id }}-$([int]$env:STAGE - 1)" >> $env:GITHUB_OUTPUT
+          "state_out=mu-state-${{ github.run_id }}-$env:STAGE" >> $env:GITHUB_OUTPUT
+
+      - name: Check out Project Mu
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+
+      - name: Choose build folder
+        id: workdir
+        env:
+          GIVEN: ${{ inputs.workdir }}
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          if ($env:GIVEN) { $path = $env:GIVEN } else { $path = python scripts/build.py pick-workdir }
+          New-Item -ItemType Directory -Force -Path $path | Out-Null
+          "MU_WORKDIR=$path" >> $env:GITHUB_ENV
+          "path=$path" >> $env:GITHUB_OUTPUT
+          Write-Host "build folder: $path"
+
+      - name: Free disk space
+        run: |
+          Get-PSDrive -PSProvider FileSystem |
+            Format-Table Name, @{n='FreeGB'; e={[math]::Round($_.Free / 1GB, 1)}}, @{n='UsedGB'; e={[math]::Round($_.Used / 1GB, 1)}}
+          $drive = (Split-Path -Qualifier $env:MU_WORKDIR).TrimEnd(':')
+          if ($drive -eq 'C' -and (Get-PSDrive C).Free / 1GB -lt 130) {
+            # Preinstalled toolchains Chromium never uses.
+            foreach ($p in 'C:\Android', 'C:\ghcup', 'C:\Strawberry', 'C:\Rust',
+                           'C:\hostedtoolcache\windows\CodeQL', 'C:\hostedtoolcache\windows\go',
+                           'C:\hostedtoolcache\windows\Ruby', 'C:\hostedtoolcache\windows\PyPy') {
+              if (Test-Path $p) { Write-Host "removing $p"; cmd.exe /c rmdir /s /q $p }
+            }
+            Get-PSDrive C | Format-Table Name, @{n='FreeGB'; e={[math]::Round($_.Free / 1GB, 1)}}
+          }
+          $global:LASTEXITCODE = 0
+
+      - name: Install depot_tools
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          $dt = Join-Path $env:MU_WORKDIR 'depot_tools'
+          if (-not (Test-Path $dt)) {
+            git clone --depth 1 https://chromium.googlesource.com/chromium/tools/depot_tools.git $dt
+          }
+          $dt >> $env:GITHUB_PATH
+          $env:PATH = "$dt;$env:PATH"
+          # First run bootstraps depot_tools' own Python and CIPD client.
+          gclient --version
+
+      - name: Sync Chromium ${{ inputs.version }}
+        if: inputs.stage == 1
+        run: python scripts/build.py sync --version $env:MU_VERSION
+
+      - name: Apply Mu patches
+        if: inputs.stage == 1
+        run: python scripts/apply_patches.py
+
+      - name: Download previous stage state
+        if: inputs.stage > 1
+        uses: actions/download-artifact@v8
+        with:
+          name: ${{ steps.plan.outputs.state_in }}
+          path: ${{ steps.workdir.outputs.path }}/state-in
+
+      - name: Restore previous stage state
+        if: inputs.stage > 1
+        run: python scripts/build.py unpack-state --from "$env:MU_WORKDIR\state-in" --delete-archive
+
+      - name: Check toolchain (installs Windows SDK if needed)
+        run: python scripts/build.py doctor --install-sdk
+
+      - name: Generate build files
+        if: inputs.stage == 1
+        run: python scripts/build.py gen
+
+      - name: Compile
+        id: compile
+        run: python scripts/build.py compile chrome --deadline ${{ steps.plan.outputs.deadline }}
+
+      - name: Package browser
+        if: steps.compile.outputs.done == 'true'
+        run: python scripts/build.py package --version $env:MU_VERSION --output "$env:MU_WORKDIR\release\project-mu-release.zip"
+
+      - name: Upload browser
+        if: steps.compile.outputs.done == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: project-mu-release
+          path: ${{ steps.workdir.outputs.path }}/release/
+          compression-level: 0
+          retention-days: 7
+          if-no-files-found: error
+
+      - name: Out of stages
+        if: steps.compile.outputs.done == 'false' && inputs.last
+        run: |
+          Write-Host "::error::Build still unfinished after the final stage. Add more stages to build-chromium.yml."
+          exit 1
+
+      - name: Pack state for next stage
+        if: steps.compile.outputs.done == 'false' && !inputs.last
+        run: python scripts/build.py pack-state --dest "$env:MU_WORKDIR\state-out"
+
+      - name: Upload state for next stage
+        if: steps.compile.outputs.done == 'false' && !inputs.last
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ steps.plan.outputs.state_out }}
+          path: ${{ steps.workdir.outputs.path }}/state-out/
+          compression-level: 0
+          retention-days: 1
+          if-no-files-found: error

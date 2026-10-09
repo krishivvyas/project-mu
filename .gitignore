@@ -1,0 +1,20 @@
+# Chromium source tree and build output (tens of GB â€” never commit)
+/src/
+/out/
+/downloads/
+/.gclient
+/.gclient_entries
+/.gclient_previous_*
+/depot_tools/
+/state-in/
+/state-out/
+/release/
+*.tar.xz
+
+# Release artifacts
+project-mu-release.zip
+
+# Python
+__pycache__/
+*.pyc
+.venv/

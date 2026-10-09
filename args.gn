@@ -1,0 +1,39 @@
+# Project Mu (無) — GN build arguments
+# Copied to src/out/Default/args.gn by `scripts/build.py gen`.
+# Target: Windows x64 release, stripped, unbranded, proprietary codecs.
+
+# --- Release shape ---------------------------------------------------------
+is_official_build = true          # full optimisation, release-style binaries
+is_debug = false
+is_component_build = false        # one monolithic chrome.dll, easier to ship
+dcheck_always_on = false
+treat_warnings_as_errors = false  # upstream warnings must not break CI
+target_cpu = "x64"
+
+# PGO profiles are not checked out (checkout_pgo_profiles=False in .gclient).
+chrome_pgo_phase = 0
+
+# Plain ninja instead of Siso: CI stops and resumes the build across jobs, and
+# ninja safely rebuilds anything interrupted (it is absent from .ninja_log).
+use_siso = false
+
+# --- No debug symbols (biggest single build-time / disk win) -------------------
+symbol_level = 0
+blink_symbol_level = 0
+v8_symbol_level = 0
+enable_iterator_debugging = false
+
+# --- No Google branding or Google services ---------------------------------
+is_chrome_branded = false
+use_official_google_api_keys = false
+google_api_key = ""
+google_default_client_id = ""
+google_default_client_secret = ""
+enable_hangout_services_extension = false
+enable_remoting = false
+enable_reporting = false
+
+# --- Media: H.264 / AAC / MP3 ---------------------------------------------
+proprietary_codecs = true
+ffmpeg_branding = "Chrome"
+enable_mse_mpeg2ts_stream_parser = true

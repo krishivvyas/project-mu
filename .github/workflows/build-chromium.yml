@@ -1,0 +1,204 @@
+# Project Mu (無) — weekly / on-demand Chromium build.
+#
+# A Chromium build takes ~12-20 h on GitHub's free 4-core Windows runners, but
+# a job may run at most 6 h. The build is therefore split into up to 8 chained
+# stages (build-stage.yml); each compiles for ~5 h and hands its half-built
+# tree to the next as an artifact. The first stage to finish packages the
+# browser, and the release job publishes it.
+#
+# To allow more stages, copy the last stage block, bump its number, move
+# `last: true` to it, and add it to the release job's `needs`.
+
+name: Build Chromium
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Chromium version to build (blank = latest Stable)
+        type: string
+        required: false
+        default: ''
+  schedule:
+    - cron: '23 2 * * 1'  # Mondays 02:23 UTC
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-chromium
+  cancel-in-progress: false
+
+jobs:
+  resolve:
+    name: Resolve version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      build: ${{ steps.check.outputs.build }}
+    steps:
+      - name: Check out Project Mu
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+
+      - name: Resolve Chromium version
+        id: version
+        env:
+          WANTED: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          if [ -n "${WANTED:-}" ]; then
+            version=$(python scripts/fetch_upstream.py --print-version --version "$WANTED")
+          else
+            version=$(python scripts/fetch_upstream.py --print-version)
+          fi
+          if ! git ls-remote --exit-code https://chromium.googlesource.com/chromium/src.git "refs/tags/$version" > /dev/null; then
+            echo "::error::Chromium has no release tag $version"
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "### Chromium $version" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Skip if already released
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          build=true
+          if [ "$EVENT" = "schedule" ]; then
+            tags=$(gh release list --repo "$GITHUB_REPOSITORY" --limit 200 --json tagName --jq '.[].tagName')
+            if [[ $'\n'"$tags"$'\n' == *$'\n'"mu-$VERSION-"* ]]; then
+              build=false
+              echo "A release for $VERSION already exists; scheduled build skipped." >> "$GITHUB_STEP_SUMMARY"
+            fi
+          fi
+          echo "build=$build" >> "$GITHUB_OUTPUT"
+
+  stage-1:
+    name: Stage 1
+    needs: resolve
+    if: needs.resolve.outputs.build == 'true'
+    uses: ./.github/workflows/build-stage.yml
+    with:
+      stage: 1
+      version: ${{ needs.resolve.outputs.version }}
+
+  stage-2:
+    name: Stage 2
+    needs: [resolve, stage-1]
+    if: needs.stage-1.outputs.done == 'false'
+    uses: ./.github/workflows/build-stage.yml
+    with:
+      stage: 2
+      version: ${{ needs.resolve.outputs.version }}
+      workdir: ${{ needs.stage-1.outputs.workdir }}
+
+  stage-3:
+    name: Stage 3
+    needs: [resolve, stage-1, stage-2]
+    if: needs.stage-2.outputs.done == 'false'
+    uses: ./.github/workflows/build-stage.yml
+    with:
+      stage: 3
+      version: ${{ needs.resolve.outputs.version }}
+      workdir: ${{ needs.stage-1.outputs.workdir }}
+
+  stage-4:
+    name: Stage 4
+    needs: [resolve, stage-1, stage-3]
+    if: needs.stage-3.outputs.done == 'false'
+    uses: ./.github/workflows/build-stage.yml
+    with:
+      stage: 4
+      version: ${{ needs.resolve.outputs.version }}
+      workdir: ${{ needs.stage-1.outputs.workdir }}
+
+  stage-5:
+    name: Stage 5
+    needs: [resolve, stage-1, stage-4]
+    if: needs.stage-4.outputs.done == 'false'
+    uses: ./.github/workflows/build-stage.yml
+    with:
+      stage: 5
+      version: ${{ needs.resolve.outputs.version }}
+      workdir: ${{ needs.stage-1.outputs.workdir }}
+
+  stage-6:
+    name: Stage 6
+    needs: [resolve, stage-1, stage-5]
+    if: needs.stage-5.outputs.done == 'false'
+    uses: ./.github/workflows/build-stage.yml
+    with:
+      stage: 6
+      version: ${{ needs.resolve.outputs.version }}
+      workdir: ${{ needs.stage-1.outputs.workdir }}
+
+  stage-7:
+    name: Stage 7
+    needs: [resolve, stage-1, stage-6]
+    if: needs.stage-6.outputs.done == 'false'
+    uses: ./.github/workflows/build-stage.yml
+    with:
+      stage: 7
+      version: ${{ needs.resolve.outputs.version }}
+      workdir: ${{ needs.stage-1.outputs.workdir }}
+
+  stage-8:
+    name: Stage 8
+    needs: [resolve, stage-1, stage-7]
+    if: needs.stage-7.outputs.done == 'false'
+    uses: ./.github/workflows/build-stage.yml
+    with:
+      stage: 8
+      version: ${{ needs.resolve.outputs.version }}
+      workdir: ${{ needs.stage-1.outputs.workdir }}
+      last: true
+
+  release:
+    name: Publish release
+    needs: [resolve, stage-1, stage-2, stage-3, stage-4, stage-5, stage-6, stage-7, stage-8]
+    if: >-
+      always() &&
+      needs.resolve.outputs.build == 'true' &&
+      contains(needs.*.outputs.done, 'true') &&
+      !contains(needs.*.result, 'failure') &&
+      !contains(needs.*.result, 'cancelled')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download browser
+        uses: actions/download-artifact@v8
+        with:
+          name: project-mu-release
+          path: dist
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.resolve.outputs.version }}
+          RUN: ${{ github.run_number }}
+        run: |
+          set -euo pipefail
+          cd dist
+          sha256sum -c project-mu-release.zip.sha256
+          tag="mu-$VERSION-r$RUN"
+          {
+            echo "Project Mu built from Chromium **$VERSION** with the patch set at $GITHUB_SHA."
+            echo
+            echo "Unzip and run \`project-mu-$VERSION/chrome.exe\`."
+            echo "Verify the download against \`project-mu-release.zip.sha256\`."
+          } > ../notes.md
+          gh release create "$tag" project-mu-release.zip project-mu-release.zip.sha256 \
+            --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+            --title "Project Mu $VERSION (build $RUN)" --notes-file ../notes.md
+          echo "Published [$tag]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/tag/$tag)" >> "$GITHUB_STEP_SUMMARY"
