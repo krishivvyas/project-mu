@@ -37,6 +37,12 @@ TARBALL_URL = (
     "https://commondatastorage.googleapis.com/chromium-browser-official/"
     "chromium-{version}.tar.xz"
 )
+VERSIONHISTORY_URL = (
+    "https://versionhistory.googleapis.com/v1/chrome/platforms/{platform}"
+    "/channels/{channel}/versions?order_by=version%20desc&page_size=1"
+)
+VERSIONHISTORY_PLATFORMS = {"Windows": "win64", "Linux": "linux", "Mac": "mac",
+                            "Android": "android", "iOS": "ios", "ChromeOS": "chromeos"}
 VERSION_RE = re.compile(r"^\d+\.\d+\.\d+\.\d+$")
 VERSION_MARKER = ".mu_version"
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -53,7 +59,9 @@ class FetchError(RuntimeError):
 
 
 def log(msg: str) -> None:
-    print(f"[mu] {msg}", flush=True)
+    # Diagnostics go to stderr so stdout stays machine-readable
+    # (CI captures `--print-version` output with $(...)).
+    print(f"[mu] {msg}", file=sys.stderr, flush=True)
 
 
 # --------------------------------------------------------------------------
@@ -116,20 +124,52 @@ def with_retries(what: str, fn):
         delay = min(delay * 2, 60)
 
 
-def resolve_version(channel: str, platform: str) -> str:
-    url = DASH_URL.format(channel=channel, platform=platform)
-
+def fetch_json(what: str, url: str):
     def fetch():
         with http_open(url) as r:
             return json.load(r)
+    try:
+        return with_retries(what, fetch)
+    except ValueError as e:  # JSONDecodeError: e.g. an HTML error page
+        raise FetchError(f"{what}: response was not JSON ({e})") from e
 
-    releases = with_retries("Chromium Dash", fetch)
-    if not isinstance(releases, list) or not releases:
+
+def version_from_dash(channel: str, platform: str) -> str:
+    releases = fetch_json("Chromium Dash", DASH_URL.format(channel=channel, platform=platform))
+    if not isinstance(releases, list) or not releases or not isinstance(releases[0], dict):
         raise FetchError(f"Chromium Dash returned no {channel}/{platform} releases")
-    version = releases[0].get("version", "")
-    if not VERSION_RE.match(version):
-        raise FetchError(f"Chromium Dash returned an unexpected version: {version!r}")
-    return version
+    return str(releases[0].get("version", ""))
+
+
+def version_from_versionhistory(channel: str, platform: str) -> str:
+    url = VERSIONHISTORY_URL.format(platform=VERSIONHISTORY_PLATFORMS[platform],
+                                    channel=channel.lower())
+    data = fetch_json("VersionHistory API", url)
+    versions = data.get("versions") if isinstance(data, dict) else None
+    if not versions or not isinstance(versions[0], dict):
+        raise FetchError(f"VersionHistory API returned no {channel}/{platform} versions")
+    return str(versions[0].get("version", ""))
+
+
+def resolve_version(channel: str, platform: str) -> str:
+    """Latest version from Chromium Dash, falling back to Google's VersionHistory API."""
+    errors = []
+    for source, lookup in (("Chromium Dash", version_from_dash),
+                           ("VersionHistory API", version_from_versionhistory)):
+        try:
+            version = lookup(channel, platform)
+        except FetchError as e:
+            log(f"warning: {e}")
+            errors.append(str(e))
+            continue
+        if VERSION_RE.match(version):
+            if errors:
+                log(f"using {source} instead")
+            return version
+        msg = f"{source} returned an unexpected version: {version!r}"
+        log(f"warning: {msg}")
+        errors.append(msg)
+    raise FetchError("could not resolve the latest version: " + "; ".join(errors))
 
 
 def remote_size(url: str) -> int:

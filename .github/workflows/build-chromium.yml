@@ -53,10 +53,12 @@ jobs:
           WANTED: ${{ inputs.version }}
         run: |
           set -euo pipefail
-          if [ -n "${WANTED:-}" ]; then
-            version=$(python scripts/fetch_upstream.py --print-version --version "$WANTED")
-          else
-            version=$(python scripts/fetch_upstream.py --print-version)
+          # Diagnostics go to stderr and appear in this log; stdout is only the version.
+          args=(--print-version)
+          if [ -n "${WANTED:-}" ]; then args+=(--version "$WANTED"); fi
+          if ! version=$(python scripts/fetch_upstream.py "${args[@]}"); then
+            echo "::error::Could not resolve the Chromium version (details in the step log)"
+            exit 1
           fi
           if ! git ls-remote --exit-code https://chromium.googlesource.com/chromium/src.git "refs/tags/$version" > /dev/null; then
             echo "::error::Chromium has no release tag $version"
