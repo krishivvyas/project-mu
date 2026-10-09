@@ -7,3 +7,4 @@
 0001-default-search-duckduckgo.patch
 0002-disable-history-by-default.patch
 0003-strip-google-telemetry.patch
+0004-clear-session-on-exit.patch

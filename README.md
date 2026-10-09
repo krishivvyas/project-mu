@@ -9,7 +9,7 @@
 </div>
 
 > [!NOTE]
-> **Status: early.** The build pipeline and the first three privacy patches are
+> **Status: early.** The build pipeline and the first four privacy patches are
 > written and verified to apply cleanly to Chromium 156.0.8078.12. They have
 > not yet been through a full CI compile. See
 > [What Mu changes today](#what-mu-changes-today) for exactly what is and isn't
@@ -41,11 +41,15 @@ upstream Chromium already tests.
 | `0001` default search | DuckDuckGo is the default search engine in every region. The New Tab page stays local, so opening a tab makes no request to the search engine. |
 | `0002` no history | Page visits are not written to the History database (the `SavingBrowserHistoryDisabled` mechanism). |
 | `0003` Google services off | No browser sign-in prompts, no Google Translate offers, no preloading or prefetching, and metrics reporting off regardless of installer consent. |
+| `0004` session returns to Mu | Cookies and site data are session-only and deleted on exit. Keep a site signed in under *Settings → Privacy → Site settings*. History, the downloads list and the cache are also deleted when the browser closes, or on the next start after a crash. |
 
-Not covered yet: cookies, site data, cache and the downloads list still persist
-between sessions until the clear-on-exit patch lands. Safe Browsing is left at
-Chromium's default because it protects against phishing and malware. Note that
-Safe Browsing needs Google API keys, and Mu ships without them.
+Kept on purpose: saved passwords, autofill entries and site permissions, because
+you save those deliberately. Clearing on exit only runs while browser sign-in is
+off (the default), so data synced to an account is never wiped.
+
+Safe Browsing is left at Chromium's default because it protects against
+phishing and malware. Note that Safe Browsing needs Google API keys, and Mu
+ships without them.
 
 ### What Mu is not
 
@@ -104,6 +108,7 @@ project-mu/
 │   ├── 0001-default-search-duckduckgo.patch
 │   ├── 0002-disable-history-by-default.patch
 │   ├── 0003-strip-google-telemetry.patch
+│   ├── 0004-clear-session-on-exit.patch
 │   └── patch_order.list     # which .patch files apply, in order
 ├── scripts/
 │   ├── fetch_upstream.py    # resolve the latest version; download the source tarball
@@ -262,9 +267,10 @@ like ink dissolving, not like "Closing 12 tabs…".
 | ✅ | `0001` DuckDuckGo as the default search engine, local New Tab page |
 | ✅ | `0002` history saving off by default |
 | ✅ | `0003` sign-in, Translate, preloading and metrics off by default |
+| ✅ | `0004` cookies and site data session-only; history, downloads and cache cleared on exit |
 | ⬜ | First full CI build with the patch set |
 | ⬜ | Sumi/Washi theme and a minimal New Tab page |
-| ⬜ | Clear cookies and site data on exit, with the Inkan purge micro-interaction |
+| ⬜ | Inkan "return to Mu" purge micro-interaction |
 | ⬜ | Mu branding (name, icons, `mu.exe`) |
 
 ---

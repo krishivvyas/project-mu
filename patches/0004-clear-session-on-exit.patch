@@ -1,0 +1,55 @@
+Project Mu: return each session to Mu when the browser closes
+
+Ichi-go ichi-e: nothing a session leaves behind should outlive it.
+
+  * Cookies and site data (localStorage, IndexedDB, service workers, ...)
+    default to "session only": they live in memory for the session and are
+    deleted on exit. This is the "Delete data sites have saved when you close
+    all windows" setting (policy DefaultCookiesSetting = 4), so users can still
+    keep chosen sites signed in via Settings > Site settings.
+  * The ClearBrowsingDataOnExitList pref now defaults to browsing history,
+    download history and cached images/files. ChromeBrowsingDataLifetimeManager
+    deletes these when the profile shuts down, and retries on the next start
+    if the browser crashed. Deletion only runs while browser sign-in is
+    disabled (0003 makes that the default), so synced data is never wiped.
+
+Passwords, autofill data and site permissions are kept: users save those
+deliberately.
+
+diff --git a/components/browsing_data/core/pref_names.cc b/components/browsing_data/core/pref_names.cc
+index d69d20b..e8ff9c7 100644
+--- a/components/browsing_data/core/pref_names.cc
++++ b/components/browsing_data/core/pref_names.cc
+@@ -14,7 +14,14 @@ namespace browsing_data::prefs {
+ void RegisterBrowserUserPrefs(user_prefs::PrefRegistrySyncable* registry) {
+   registry->RegisterListPref(kBrowsingDataLifetime);
+   registry->RegisterBooleanPref(kClearBrowsingDataOnExitDeletionPending, false);
+-  registry->RegisterListPref(kClearBrowsingDataOnExitList);
++  // Project Mu: browsing history, the downloads list and the HTTP cache are
++  // deleted when the browser closes. Cookies and site data are handled by the
++  // session-only cookie default, which users can adjust per site.
++  registry->RegisterListPref(kClearBrowsingDataOnExitList,
++                             base::ListValue()
++                                 .Append("browsing_history")
++                                 .Append("download_history")
++                                 .Append("cached_images_and_files"));
+ #if BUILDFLAG(IS_IOS)
+   registry->RegisterIntegerPref(
+       kDeleteTimePeriod,
+diff --git a/components/content_settings/core/browser/content_settings_registry.cc b/components/content_settings/core/browser/content_settings_registry.cc
+index 53b0e2c..460164d 100644
+--- a/components/content_settings/core/browser/content_settings_registry.cc
++++ b/components/content_settings/core/browser/content_settings_registry.cc
+@@ -84,8 +84,11 @@ void ContentSettingsRegistry::Init() {
+   // PrefProvider::DiscardOrMigrateObsoletePreferences() and
+   // DefaultProvider::DiscardOrMigrateObsoletePreferences() accordingly.
+ 
++  // Project Mu: cookies and site data live only for the session and are
++  // deleted when the browser closes. Users can keep specific sites in
++  // Settings > Privacy > Site settings.
+   Register(
+-      ContentSettingsType::COOKIES, "cookies", CONTENT_SETTING_ALLOW,
++      ContentSettingsType::COOKIES, "cookies", CONTENT_SETTING_SESSION_ONLY,
+       WebsiteSettingsInfo::SYNCABLE,
+       /*allowlisted_primary_schemes=*/{kChromeUIScheme, kChromeDevToolsScheme},
+       /* additional secondary schemes are allowlisted via
