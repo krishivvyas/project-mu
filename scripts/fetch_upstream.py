@@ -124,6 +124,15 @@ def with_retries(what: str, fn):
         delay = min(delay * 2, 60)
 
 
+def normalize_version(text: str) -> str:
+    """Accept '156.0.8078.12' plus common decorations such as 'Chromium 156.0.8078.12',
+    'v156.0.8078.12' or surrounding whitespace; reject anything ambiguous."""
+    found = re.findall(r"(?<![\d.])\d+\.\d+\.\d+\.\d+(?![\d.])", text)
+    if len(set(found)) != 1:
+        raise FetchError(f"--version must contain one version like 156.0.8078.12, got {text!r}")
+    return found[0]
+
+
 def fetch_json(what: str, url: str):
     def fetch():
         with http_open(url) as r:
@@ -519,9 +528,7 @@ def main(argv: list[str] | None = None) -> int:
     downloads = workdir / "downloads"
 
     if args.version:
-        if not VERSION_RE.match(args.version):
-            raise FetchError(f"--version must look like 156.0.8078.12, got {args.version!r}")
-        version = args.version
+        version = normalize_version(args.version)
         if not args.print_version:
             log(f"using pinned version {version}")
     else:
