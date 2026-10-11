@@ -347,7 +347,11 @@ def cmd_doctor(args: argparse.Namespace) -> int:
                    "Chromium may have dropped ninja; set use_siso=true in args.gn")
 
     free = shutil.disk_usage(workdir if workdir.exists() else workdir.anchor or ".").free
-    report(free > 60 * 2**30, f"{free / 2**30:.0f} GiB free at {workdir}",
+    # A resumed build (CI stage 2+) already holds the checkout and part of the
+    # objects on disk, so it only needs room for what is left to compile.
+    resuming = (src / OUT_REL / "build.ninja").is_file()
+    need_gib = 25 if resuming else 60
+    report(free > need_gib * 2**30, f"{free / 2**30:.0f} GiB free at {workdir} (need {need_gib})",
            "Chromium needs roughly 100 GiB for checkout + build")
 
     if problems:
