@@ -583,8 +583,15 @@ def cmd_unpack_state(args: argparse.Namespace) -> int:
     args.workdir.mkdir(parents=True, exist_ok=True)
     if src_of(args.workdir).exists():
         raise BuildError(f"{src_of(args.workdir)} already exists; refusing to overwrite")
-    run([seven_zip(), "x", "-y", "-snl", "-bsp1", "-bso0", f"-o{args.workdir}", str(first)],
-        args.workdir, dict(os.environ))
+    # Chromium has ~95 relative symlinks that climb with "..\" (node_modules/.bin,
+    # perfetto headers, ...). 7-Zip 25.01+ refuses those as "dangerous" and exits 2;
+    # -snld20 restores them as before. Safe here: we made this archive in stage 1.
+    try:
+        run([seven_zip(), "x", "-y", "-snl", "-snld20", "-bsp1", "-bso0", f"-o{args.workdir}", str(first)],
+            args.workdir, dict(os.environ))
+    except BuildError as e:
+        free = shutil.disk_usage(args.workdir).free
+        raise BuildError(f"{e} while unpacking state ({free / 2**30:.1f} GiB free at {args.workdir})")
     require_src(args.workdir)
     if args.delete_archive:
         shutil.rmtree(source)
@@ -666,4 +673,7 @@ if __name__ == "__main__":
         sys.exit(main())
     except BuildError as e:
         log(f"error: {e}")
+        if os.environ.get("GITHUB_ACTIONS") == "true":
+            # Also show the error on the run's summary page, not only in the step log.
+            print(f"::error::{str(e).splitlines()[0]}", flush=True)
         sys.exit(1)
