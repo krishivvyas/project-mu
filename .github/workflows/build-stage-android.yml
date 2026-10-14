@@ -1,0 +1,199 @@
+# Project Mu (無) — one stage of the Android build.
+#
+# Called by build-chromium.yml. The Android counterpart of build-stage.yml:
+# Chromium for Android can only be built on Linux, so this runs on Ubuntu.
+# Stage 1 checks out Chromium with the Android SDK/NDK, applies the Mu patches
+# and generates the build; later stages restore the previous stage's tree.
+# Every stage compiles until its time budget runs out, then either signs the
+# finished APK or hands its state to the next stage.
+#
+# The runner's two disks (/ and /mnt) are joined into one LVM volume mounted
+# at /mu: an Android checkout plus build needs ~100 GB, more than either has.
+
+name: Build stage (Android)
+
+on:
+  workflow_call:
+    inputs:
+      stage:
+        description: Stage number (1 = fresh checkout)
+        type: number
+        required: true
+      version:
+        description: Chromium version tag
+        type: string
+        required: true
+      last:
+        description: Fail instead of handing off if the build is still unfinished
+        type: boolean
+        required: false
+        default: false
+    outputs:
+      done:
+        description: "'true' once the APK is built and signed"
+        value: ${{ jobs.build.outputs.done }}
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Stage ${{ inputs.stage }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 355
+    outputs:
+      done: ${{ steps.compile.outputs.done }}
+    defaults:
+      run:
+        shell: bash
+    env:
+      PYTHONUNBUFFERED: '1'
+      MU_VERSION: ${{ inputs.version }}
+      # Fixed in every stage: ninja records absolute paths.
+      MU_WORKDIR: /mu
+    steps:
+      - name: Plan time budget
+        id: plan
+        env:
+          STAGE: ${{ inputs.stage }}
+        run: |
+          start=$(date +%s)
+          # Same budget as the Windows stages: compile for 290 of the 355 minutes.
+          echo "deadline=$((start + 290 * 60))" >> "$GITHUB_OUTPUT"
+          echo "state_in=mu-android-state-${{ github.run_id }}-$((STAGE - 1))" >> "$GITHUB_OUTPUT"
+          echo "state_out=mu-android-state-${{ github.run_id }}-$STAGE" >> "$GITHUB_OUTPUT"
+
+      - name: Check out Project Mu
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+
+      - name: Make room for the build
+        run: |
+          set -euo pipefail
+          df -h / /mnt
+          sudo swapoff -a || true
+          sudo rm -f /mnt/swapfile /swapfile
+          # Preinstalled toolchains Chromium never uses (it brings its own
+          # Android SDK, NDK, JDK and clang).
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup \
+                      /opt/hostedtoolcache/CodeQL /opt/hostedtoolcache/go /opt/hostedtoolcache/Ruby \
+                      /opt/hostedtoolcache/PyPy /usr/local/share/boost /usr/share/swift /usr/local/julia*
+          sudo docker image prune --all --force > /dev/null 2>&1 || true
+          command -v pvcreate > /dev/null || sudo apt-get install -y -q lvm2
+
+          avail() { df --output=avail -BG "$1" | tail -1 | tr -dc '0-9'; }
+          # Keep 12 GB on / for apt packages and /tmp.
+          root_gb=$(( $(avail /) - 12 ))
+          pvs=()
+          if [ "$root_gb" -gt 5 ]; then
+            sudo fallocate -l "${root_gb}G" /mu-root.img
+            pvs+=("$(sudo losetup --find --show /mu-root.img)")
+          fi
+          # /mnt is a separate temporary disk on GitHub's Linux runners.
+          if [ "$(df --output=source / | tail -1)" != "$(df --output=source /mnt | tail -1)" ]; then
+            mnt_gb=$(( $(avail /mnt) - 2 ))
+            sudo fallocate -l "${mnt_gb}G" /mnt/mu-mnt.img
+            pvs+=("$(sudo losetup --find --show /mnt/mu-mnt.img)")
+          fi
+          sudo pvcreate -q "${pvs[@]}"
+          sudo vgcreate -q mu "${pvs[@]}"
+          sudo lvcreate -q -l 100%FREE -n build mu
+          sudo mkfs.ext4 -q -m 0 -E nodiscard /dev/mu/build
+          sudo mkdir -p "$MU_WORKDIR"
+          sudo mount -o noatime /dev/mu/build "$MU_WORKDIR"
+          sudo chown "$(id -u):$(id -g)" "$MU_WORKDIR"
+          df -h "$MU_WORKDIR"
+
+      - name: Install depot_tools
+        run: |
+          set -euo pipefail
+          dt="$MU_WORKDIR/depot_tools"
+          [ -d "$dt" ] || git clone --depth 1 https://chromium.googlesource.com/chromium/tools/depot_tools.git "$dt"
+          echo "$dt" >> "$GITHUB_PATH"
+          export PATH="$dt:$PATH"
+          # First run bootstraps depot_tools' own Python and CIPD client.
+          gclient --version
+
+      - name: Sync Chromium ${{ inputs.version }} for Android
+        if: inputs.stage == 1
+        run: python scripts/build.py sync --version "$MU_VERSION" --target-os android
+
+      - name: Apply Mu patches
+        if: inputs.stage == 1
+        run: python scripts/apply_patches.py
+
+      - name: Download previous stage state
+        if: inputs.stage > 1
+        uses: actions/download-artifact@v8
+        with:
+          name: ${{ steps.plan.outputs.state_in }}
+          path: /mu/state-in
+
+      - name: Restore previous stage state
+        if: inputs.stage > 1
+        run: python scripts/build.py unpack-state --from "$MU_WORKDIR/state-in" --delete-archive
+
+      - name: Install build dependencies
+        # System packages live outside /mu, so every stage installs them.
+        run: '"$MU_WORKDIR/src/build/install-build-deps.sh" --android --no-prompt'
+
+      - name: Check toolchain
+        run: python scripts/build.py doctor
+
+      - name: Generate build files
+        if: inputs.stage == 1
+        run: python scripts/build.py gen --args args.android.gn
+
+      - name: Compile
+        id: compile
+        run: python scripts/build.py compile chrome_public_apk --deadline ${{ steps.plan.outputs.deadline }}
+
+      - name: Sign APK
+        if: steps.compile.outputs.done == 'true'
+        env:
+          KEYSTORE_B64: ${{ secrets.MU_ANDROID_KEYSTORE_B64 }}
+          MU_ANDROID_KEY_ALIAS: ${{ secrets.MU_ANDROID_KEY_ALIAS }}
+          MU_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.MU_ANDROID_KEYSTORE_PASSWORD }}
+          MU_ANDROID_KEY_PASSWORD: ${{ secrets.MU_ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          export MU_ANDROID_KEYSTORE="$RUNNER_TEMP/mu-release.keystore"
+          trap 'rm -f "$MU_ANDROID_KEYSTORE"' EXIT
+          printf '%s' "$KEYSTORE_B64" | base64 -d > "$MU_ANDROID_KEYSTORE"
+          python scripts/build.py package-android --output "$MU_WORKDIR/release/project-mu-android-arm64.apk"
+
+      - name: Upload APK
+        if: steps.compile.outputs.done == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: project-mu-android
+          path: /mu/release/
+          compression-level: 0
+          retention-days: 7
+          if-no-files-found: error
+
+      - name: Out of stages
+        if: steps.compile.outputs.done == 'false' && inputs.last
+        run: |
+          echo "::error::Android build still unfinished after the final stage. Add more stages to build-chromium.yml."
+          exit 1
+
+      - name: Pack state for next stage
+        if: steps.compile.outputs.done == 'false' && !inputs.last
+        run: python scripts/build.py pack-state --dest "$MU_WORKDIR/state-out" --level 3
+
+      - name: Upload state for next stage
+        if: steps.compile.outputs.done == 'false' && !inputs.last
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ steps.plan.outputs.state_out }}
+          path: /mu/state-out/
+          compression-level: 0
+          retention-days: 1
+          if-no-files-found: error

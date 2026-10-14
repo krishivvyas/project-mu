@@ -146,17 +146,21 @@ jobs:
 
       - name: Compile
         id: compile
-        run: python scripts/build.py compile chrome --deadline ${{ steps.plan.outputs.deadline }}
+        # mini_installer adds setup.exe and the LZMA-compressed installer on top of chrome.
+        run: python scripts/build.py compile chrome mini_installer --deadline ${{ steps.plan.outputs.deadline }}
 
       - name: Package browser
         if: steps.compile.outputs.done == 'true'
-        run: python scripts/build.py package --version $env:MU_VERSION --output "$env:MU_WORKDIR\release\project-mu-release.zip"
+        run: >-
+          python scripts/build.py package --version $env:MU_VERSION
+          --output "$env:MU_WORKDIR\release\project-mu-windows-x64-portable.zip"
+          --installer-output "$env:MU_WORKDIR\release\project-mu-windows-x64-setup.exe"
 
       - name: Upload browser
         if: steps.compile.outputs.done == 'true'
         uses: actions/upload-artifact@v7
         with:
-          name: project-mu-release
+          name: project-mu-windows
           path: ${{ steps.workdir.outputs.path }}/release/
           compression-level: 0
           retention-days: 7

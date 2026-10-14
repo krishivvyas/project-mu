@@ -9,9 +9,10 @@
 </div>
 
 > [!NOTE]
-> **Status: early.** The build pipeline and the first four privacy patches are
-> written and verified to apply cleanly to Chromium 156.0.8078.12. They have
-> not yet been through a full CI compile. See
+> **Status: early.** The first four privacy patches build into a working
+> Windows release on Chromium 156.0.8078.12 (release `mu-156.0.8078.12-r6`).
+> The Windows installer and the Android build are new and have not been
+> through a full CI build yet. See
 > [What Mu changes today](#what-mu-changes-today) for exactly what is and isn't
 > covered.
 
@@ -51,6 +52,14 @@ Safe Browsing is left at Chromium's default because it protects against
 phishing and malware. Note that Safe Browsing needs Google API keys, and Mu
 ships without them.
 
+**On Android** the patches apply, but not all of them have the same effect.
+Android apps don't really "exit", so the clear-on-exit list from `0004` does
+not run. Session-only cookies last until Android stops the app. The Translate
+default from `0003` is a desktop setting. DuckDuckGo search, history off,
+sign-in off, metrics off and preloading off apply on both platforms. There is
+no iOS build: outside the EU, Apple only allows WebKit browsers on iOS, so a
+Chromium-based Mu can't be shipped there.
+
 ### What Mu is not
 
 Mu stops your **own machine** from remembering you. It is not an anonymity tool:
@@ -84,7 +93,7 @@ flowchart LR
     D --> E["ninja, stage 1<br/>~5 h"]
     E -->|"unfinished: pack state"| F["ninja, stages 2..8<br/>resume from artifact"]
     E -->|finished| G
-    F -->|finished| G["package<br/>project-mu-release.zip"]
+    F -->|finished| G["package<br/>setup.exe, portable .zip, .apk"]
     G --> H["GitHub Release<br/>mu-version-rN"]
 ```
 
@@ -102,8 +111,9 @@ The first stage to finish packages the browser, and a final job publishes it.
 ```text
 project-mu/
 ├── .github/workflows/
-│   ├── build-chromium.yml   # orchestrator: resolve version, 8 chained stages, release
-│   └── build-stage.yml      # one ~6 h stage: sync/restore, compile, package or hand off
+│   ├── build-chromium.yml   # orchestrator: resolve version, Windows + Android stage chains, release
+│   ├── build-stage.yml      # one ~6 h Windows stage: sync/restore, compile, package or hand off
+│   └── build-stage-android.yml  # the same for Android, on Linux
 ├── patches/
 │   ├── 0001-default-search-duckduckgo.patch
 │   ├── 0002-disable-history-by-default.patch
@@ -113,8 +123,11 @@ project-mu/
 ├── scripts/
 │   ├── fetch_upstream.py    # resolve the latest version; download the source tarball
 │   ├── apply_patches.py     # sync src/ to the patch list; diagnose failures
-│   └── build.py             # Windows build driver (sync, doctor, gen, compile, package)
-├── args.gn                  # GN build flags
+│   ├── build.py             # build driver (sync, doctor, gen, compile, package, sign)
+│   └── publish_release.sh   # CI: add one platform's files to the GitHub release
+├── args.gn                  # GN build flags, Windows
+├── args.android.gn          # GN build flags, Android
+├── context.md               # brief for the download website
 ├── LICENSE                  # MIT
 └── README.md
 ```
@@ -123,18 +136,32 @@ project-mu/
 
 ## Download a release
 
-1. Open the repository's **Releases** page and download
-   `project-mu-release.zip` and `project-mu-release.zip.sha256`.
-2. Check the download in PowerShell:
-   ```powershell
-   (Get-FileHash .\project-mu-release.zip -Algorithm SHA256).Hash.ToLower()
-   Get-Content .\project-mu-release.zip.sha256
-   ```
-   The two hashes must match.
-3. Unzip it and run `project-mu-<version>\chrome.exe`. No installer is needed.
+Every release on the **Releases** page carries these files, each with a
+matching `.sha256`. The names never change between versions, so
+`https://github.com/krishivvyas/project-mu/releases/latest/download/<file>`
+always points at the newest build. Releases up to `r6` used the single name
+`project-mu-release.zip`.
 
-The binaries are not code-signed, so Windows SmartScreen will warn you on first
-launch.
+| File | Platform |
+|---|---|
+| `project-mu-windows-x64-setup.exe` | Windows 10/11 x64. Installs for the current user, no admin needed |
+| `project-mu-windows-x64-portable.zip` | Windows 10/11 x64. Unzip and run `project-mu-<version>\chrome.exe` |
+| `project-mu-android-arm64.apk` | Android, 64-bit ARM phones. Only present once Android signing is set up |
+
+Check a download in PowerShell (the two hashes must match):
+
+```powershell
+(Get-FileHash .\project-mu-windows-x64-setup.exe -Algorithm SHA256).Hash.ToLower()
+Get-Content .\project-mu-windows-x64-setup.exe.sha256
+```
+
+The Windows binaries are not code-signed, so SmartScreen warns on first launch.
+Until Mu has its own branding, the installer installs as **Chromium** (in
+`%LOCALAPPDATA%\Chromium`) and shares that folder with any other Chromium build
+installed the same way.
+
+On Android, allow your browser or file manager to *install unknown apps*,
+then open the APK.
 
 ---
 
@@ -170,12 +197,13 @@ python scripts\build.py doctor --install-sdk
 
 # 4. Generate, compile and package
 python scripts\build.py gen
-python scripts\build.py compile chrome
-python scripts\build.py package --version $v
+python scripts\build.py compile chrome mini_installer
+python scripts\build.py package --version $v --installer-output project-mu-windows-x64-setup.exe
 ```
 
 The browser runs straight from `C:\mu-build\src\out\Default\chrome.exe`, and
-`package` writes `project-mu-release.zip` to the repository root. A full build
+`package` writes `project-mu-windows-x64-portable.zip` (and, with
+`--installer-output`, the installer) to the repository root. A full build
 takes several hours even on a fast machine. If it stops partway, run `compile`
 again and ninja continues where it left off.
 
@@ -186,12 +214,13 @@ again and ninja continues where it left off.
 | `fetch_upstream.py --print-version` | Print the latest Stable version from Chromium Dash |
 | `fetch_upstream.py --workdir D:\mu` | Download the 4+ GB source tarball (resumable, SHA-256 verified) and unpack it to `src/`. Useful for writing patches without a full checkout |
 | `apply_patches.py [--status \| --revert]` | Bring `src/` in line with `patch_order.list`: apply new patches, re-apply edited ones, revert removed ones |
-| `build.py sync --version V` | Shallow `gclient` checkout of tag `V`, including every Windows toolchain dependency |
-| `build.py doctor [--install-sdk]` | Check VS, Windows SDK, Debuggers, depot_tools, ninja and free disk |
-| `build.py gen` | Copy `args.gn` to `out/Default` and run `gn gen` |
+| `build.py sync --version V [--target-os android]` | Shallow `gclient` checkout of tag `V`, including every Windows (or Android) toolchain dependency |
+| `build.py doctor [--install-sdk]` | Check VS, Windows SDK, Debuggers, depot_tools, ninja and free disk (on Linux: depot_tools, ninja, Android SDK, disk) |
+| `build.py gen [--args FILE]` | Copy `args.gn` (or `args.android.gn`) to `out/Default` and run `gn gen` |
 | `build.py compile [targets] [--deadline T \| --budget-minutes M]` | Run ninja, stopping cleanly when time runs out (used by CI) |
-| `build.py package --version V` | Zip Chromium's official Windows file set into `project-mu-release.zip` |
-| `build.py pack-state` / `unpack-state` | Carry a half-built tree between CI stages |
+| `build.py package --version V [--installer-output F]` | Zip Chromium's official Windows file set into `project-mu-windows-x64-portable.zip`; optionally copy `mini_installer.exe` |
+| `build.py package-android` | Sign `ChromePublic.apk` with the release key into `project-mu-android-arm64.apk` |
+| `build.py pack-state` / `unpack-state` | Carry a half-built tree between CI stages (7-Zip on Windows, tar + zstd on Linux) |
 
 Every script accepts `--help`.
 
@@ -234,8 +263,37 @@ in `src/.mu/`, so reruns never apply anything twice.
   one-day artifact for the next stage. Eight stages are defined. To allow more,
   copy the last stage block in `build-chromium.yml`, bump its number, move
   `last: true` to it, and add it to the release job's `needs`.
-- **Release:** tagged `mu-<chromium-version>-r<run-number>`, with the zip and its
-  SHA-256.
+- **Android:** a second chain of eight stages runs in parallel on
+  `ubuntu-24.04`, building `chrome_public_apk` for arm64 from `args.android.gn`.
+  Each stage joins the runner's `/` and `/mnt` disks into one volume at `/mu`,
+  because a checkout plus build needs about 100 GB. The chain only runs when the
+  signing secrets below are set. Otherwise the run warns and releases Windows only.
+- **Release:** tagged `mu-<chromium-version>-r<run-number>`. Each platform
+  publishes its own files as soon as it finishes, so a failed Android build
+  never holds back Windows.
+
+### Android release signing (one-time setup)
+
+Android only installs an update over an app if both are signed with the same
+key, so the key is the app's identity. Mu never publishes an APK signed with
+Chromium's public debug key, because anyone holding that key could ship a
+fake "update". Create your own key once, keep it safe offline, and never
+commit it:
+
+```powershell
+keytool -genkeypair -v -keystore mu-release.keystore -alias mu -keyalg RSA -keysize 4096 -validity 10000
+[Convert]::ToBase64String([IO.File]::ReadAllBytes("$PWD\mu-release.keystore")) | Set-Clipboard
+```
+
+Then add four repository secrets under *Settings → Secrets and variables →
+Actions*: `MU_ANDROID_KEYSTORE_B64` (the clipboard), `MU_ANDROID_KEY_ALIAS`
+(`mu`), `MU_ANDROID_KEYSTORE_PASSWORD` and `MU_ANDROID_KEY_PASSWORD`. If you lose
+the key, existing installs can't be updated. Users would have to uninstall and
+reinstall.
+
+The package name `io.github.krishivvyas.mu` in `args.android.gn` is
+permanent in the same way. Change it before the first Android release, or
+never.
 
 The repository should be **public**. Public repos get free 4-core / 16 GB
 Windows runners. Private repos get 2-core / 8 GB runners on metered minutes,
@@ -268,7 +326,9 @@ like ink dissolving, not like "Closing 12 tabs…".
 | ✅ | `0002` history saving off by default |
 | ✅ | `0003` sign-in, Translate, preloading and metrics off by default |
 | ✅ | `0004` cookies and site data session-only; history, downloads and cache cleared on exit |
-| ⬜ | First full CI build with the patch set |
+| ✅ | First full CI build with the patch set (`r6`) |
+| ⬜ | Windows installer (`mini_installer`) in a CI release |
+| ⬜ | First Android arm64 release |
 | ⬜ | Sumi/Washi theme and a minimal New Tab page |
 | ⬜ | Inkan "return to Mu" purge micro-interaction |
 | ⬜ | Mu branding (name, icons, `mu.exe`) |

@@ -13,6 +13,12 @@
 
 # Release artifacts
 project-mu-release.zip
+project-mu-*.zip
+project-mu-*.exe
+project-mu-*.apk
+*.sha256
+*.keystore
+*.jks
 
 # Python
 __pycache__/

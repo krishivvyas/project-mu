@@ -1,18 +1,21 @@
 #!/usr/bin/env python3
-"""Project Mu (無) — Windows build driver for Chromium.
+"""Project Mu (無) — build driver for Chromium (Windows, and Android on Linux).
 
 Subcommands (run in this order on a fresh machine):
 
     pick-workdir                 print a build folder on the emptiest fixed drive
     sync     --version V         shallow gclient checkout of Chromium tag V
     doctor   [--install-sdk]     verify VS / Windows SDK / Debuggers / tools
-    gen                          copy args.gn into out/Default and run `gn gen`
+    gen      [--args FILE]       copy args.gn into out/Default and run `gn gen`
     compile  [--deadline EPOCH]  run ninja; stop cleanly at the deadline
-    package  --version V         zip the browser into project-mu-release.zip
+    package  --version V         zip the browser (and copy the installer)
+    package-android              sign ChromePublic.apk with the release key
     pack-state / unpack-state    carry a half-finished build between CI jobs
 
 All subcommands take --workdir (env: MU_WORKDIR). The Chromium tree lives in
-<workdir>/src and depot_tools must be on PATH for sync/gen.
+<workdir>/src and depot_tools must be on PATH for sync/gen. Windows builds run
+on Windows; Android builds (`sync --target-os android`, `gen --args
+args.android.gn`) run on Linux.
 """
 
 from __future__ import annotations
@@ -42,6 +45,10 @@ VERSION_MARKER = ".mu_version"
 VERSION_RE = re.compile(r"^\d+\.\d+\.\d+\.\d+$")
 CHROMIUM_GIT = "https://chromium.googlesource.com/chromium/src.git"
 STATE_NAME = "mu-state.7z"
+# Linux uses tar + zstd: it keeps symlinks and nanosecond mtimes, and can be
+# restored as a stream so the archive and the tree never both fill the disk.
+LINUX_STATE_NAME = "mu-state.tar.zst"
+ANDROID_APK = OUT_REL / "apks" / "ChromePublic.apk"
 
 # Windows SDK 10.0.28000.2957 (September 2026), official Microsoft fwlink.
 # Override with MU_WINSDK_URL when Chromium starts requiring a newer SDK.
@@ -222,8 +229,8 @@ solutions = [
     "custom_vars": {{"checkout_pgo_profiles": False}},
   }},
 ]
-target_os = ["win"]
-target_os_only = True
+target_os = ["{target_os}"]
+target_os_only = {target_os_only}
 """
 
 
@@ -261,8 +268,11 @@ def cmd_sync(args: argparse.Namespace) -> int:
         if apply_patches.main(["--src", str(src), "--revert"]) != 0:
             raise BuildError("could not revert Mu patches; delete src/ and sync again")
 
-    (workdir / ".gclient").write_text(GCLIENT_TEMPLATE.format(url=CHROMIUM_GIT),
-                                      encoding="utf-8", newline="\n")
+    # Android builds also need the Linux host tools (sysroot, clang), so only
+    # Windows restricts the checkout to the target OS.
+    gclient_file = GCLIENT_TEMPLATE.format(url=CHROMIUM_GIT, target_os=args.target_os,
+                                           target_os_only=args.target_os == "win")
+    (workdir / ".gclient").write_text(gclient_file, encoding="utf-8", newline="\n")
     cmd = gclient_sync_cmd(gclient or "gclient", version, args.jobs)
     if args.dry_run:
         log(f"dry run: would write {workdir / '.gclient'} and run:")
@@ -314,14 +324,26 @@ def cmd_doctor(args: argparse.Namespace) -> int:
         if not ok:
             problems.append(f"{what}: {fix}" if fix else what)
 
-    report(is_windows(), "running on Windows", "Chromium for Windows must be built on Windows")
+    if is_windows():
+        log("ok   running on Windows (Windows build)")
+    else:
+        report(sys.platform.startswith("linux"), "running on Linux (Android build)",
+               "Windows builds need Windows; Android builds need Linux")
     report(sys.version_info >= (3, 9), f"python {sys.version.split()[0]}", "use Python 3.9+")
     report(bool(find_tool("gclient")), "depot_tools on PATH", "clone depot_tools and prepend it to PATH")
-    report(os.environ.get("DEPOT_TOOLS_WIN_TOOLCHAIN") == "0",
-           "DEPOT_TOOLS_WIN_TOOLCHAIN=0", "set it (build.py sets it for its own commands)")
+    if is_windows():
+        report(os.environ.get("DEPOT_TOOLS_WIN_TOOLCHAIN") == "0",
+               "DEPOT_TOOLS_WIN_TOOLCHAIN=0", "set it (build.py sets it for its own commands)")
 
     have_src = (src / "BUILD.gn").is_file()
     report(have_src, f"Chromium checkout at {src}", "run `build.py sync`")
+    if not is_windows() and have_src:
+        ninja = src / "third_party" / "ninja" / "ninja"
+        report(ninja.is_file(), f"ninja at {ninja}",
+               "Chromium may have dropped ninja; set use_siso=true in args.android.gn")
+        report((src / "third_party" / "android_sdk" / "public").is_dir(),
+               "Android SDK in src/third_party/android_sdk",
+               "sync with `--target-os android`")
     if is_windows():
         vs = vswhere()
         wanted = supported_vs(src) if have_src else {}
@@ -372,16 +394,16 @@ def cmd_gen(args: argparse.Namespace) -> int:
     src = require_src(args.workdir)
     out = src / OUT_REL
     out.mkdir(parents=True, exist_ok=True)
-    wanted = ARGS_GN.read_text(encoding="utf-8")
+    wanted = args.args.read_text(encoding="utf-8")
     target = out / "args.gn"
     # Rewriting identical args would bump the mtime and force a full regen.
     if not target.exists() or target.read_text(encoding="utf-8") != wanted:
         target.write_text(wanted, encoding="utf-8", newline="\n")
-        log(f"wrote {target}")
-    gn = src / "buildtools" / "win" / "gn.exe"
+        log(f"wrote {target} from {args.args.name}")
+    gn = src / "buildtools" / ("win/gn.exe" if is_windows() else "linux64/gn")
     gn_cmd = str(gn) if gn.is_file() else (find_tool("gn") or "")
     if not gn_cmd:
-        raise BuildError("gn not found (expected src/buildtools/win/gn.exe from gclient sync)")
+        raise BuildError(f"gn not found (expected {gn} from gclient sync)")
     run([gn_cmd, "gen", str(OUT_REL)], src, build_env(src))
     return 0
 
@@ -539,11 +561,74 @@ def cmd_package(args: argparse.Namespace) -> int:
         z.write(REPO_ROOT / "LICENSE", f"{root}/LICENSE-project-mu.txt")
         z.writestr(f"{root}/VERSION", args.version + "\n")
     os.replace(tmp, dest)
-    digest = sha256_file(dest)
-    dest.with_name(dest.name + ".sha256").write_text(f"{digest}  {dest.name}\n", encoding="utf-8")
+    digest = write_sha256(dest)
     log(f"packaged {len(chosen)} files ({total / 2**20:.0f} MiB raw) into {dest} "
         f"({dest.stat().st_size / 2**20:.0f} MiB)")
     log(f"sha256 {digest}")
+
+    if args.installer_output:
+        # mini_installer.exe holds chrome.7z (LZMA) and setup.exe, so it is
+        # roughly half the size of the portable zip.
+        installer = out / "mini_installer.exe"
+        if not installer.is_file():
+            raise BuildError(f"{installer} missing (compile the `mini_installer` target)")
+        idest: Path = args.installer_output.resolve()
+        idest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(installer, idest)
+        log(f"installer {idest} ({idest.stat().st_size / 2**20:.0f} MiB), sha256 {write_sha256(idest)}")
+    return 0
+
+
+def write_sha256(path: Path) -> str:
+    """Write <path>.sha256 in `sha256sum -c` format and return the digest."""
+    digest = sha256_file(path)
+    path.with_name(path.name + ".sha256").write_text(f"{digest}  {path.name}\n", encoding="utf-8")
+    return digest
+
+
+def version_key(name: str) -> tuple:
+    return tuple(int(p) if p.isdigit() else -1 for p in re.split(r"[.-]", name))
+
+
+def cmd_package_android(args: argparse.Namespace) -> int:
+    src = require_src(args.workdir)
+    apk = src / ANDROID_APK
+    if not apk.is_file():
+        raise BuildError(f"{apk} missing (compile the `chrome_public_apk` target)")
+    tools_root = src / "third_party" / "android_sdk" / "public" / "build-tools"
+    tools = sorted((d for d in tools_root.glob("*") if (d / "apksigner").is_file()),
+                   key=lambda d: version_key(d.name))
+    if not tools:
+        raise BuildError(f"no apksigner under {tools_root}")
+    apksigner = tools[-1] / "apksigner"
+
+    # The build signs with Chromium's public debug key. Anyone holding that key
+    # could ship an "update" that Android installs over Mu with all its data,
+    # so a release is only ever signed with the project's own key.
+    keystore = os.environ.get("MU_ANDROID_KEYSTORE", "")
+    missing = [n for n in ("MU_ANDROID_KEYSTORE", "MU_ANDROID_KEY_ALIAS",
+                           "MU_ANDROID_KEYSTORE_PASSWORD", "MU_ANDROID_KEY_PASSWORD")
+               if not os.environ.get(n)]
+    if missing:
+        raise BuildError(f"release signing not configured; set {', '.join(missing)}")
+    if not Path(keystore).is_file():
+        raise BuildError(f"keystore {keystore} not found")
+
+    env = dict(os.environ)
+    jdk = src / "third_party" / "jdk" / "current" / "bin"
+    if jdk.is_dir():
+        env["PATH"] = f"{jdk}{os.pathsep}{env.get('PATH', '')}"
+    dest: Path = args.output.resolve()
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    # Passwords are read from the environment, so they never appear in the log.
+    run([str(apksigner), "sign", "--ks", keystore,
+         "--ks-key-alias", os.environ["MU_ANDROID_KEY_ALIAS"],
+         "--ks-pass", "env:MU_ANDROID_KEYSTORE_PASSWORD",
+         "--key-pass", "env:MU_ANDROID_KEY_PASSWORD",
+         "--v4-signing-enabled", "false",  # no .idsig side file to publish
+         "--out", str(dest), str(apk)], src, env)
+    run([str(apksigner), "verify", "--print-certs", str(dest)], src, env)
+    log(f"signed {dest} ({dest.stat().st_size / 2**20:.0f} MiB), sha256 {write_sha256(dest)}")
     return 0
 
 
@@ -558,12 +643,55 @@ def seven_zip() -> str:
     raise BuildError("7-Zip (7z) not found")
 
 
+def run_bash(script: str, cwd: Path, **kwargs) -> subprocess.Popen:
+    return subprocess.Popen(["bash", "-c", "set -euo pipefail; " + script], cwd=cwd, **kwargs)
+
+
+def pack_state_linux(args: argparse.Namespace, dest: Path) -> None:
+    # pax format keeps nanosecond mtimes, which ninja compares to resume.
+    proc = run_bash(
+        f'tar --format=posix --exclude=.git -cf - src | zstd -q -T0 -{max(args.level, 1)} '
+        f'| split -b {args.volume.upper()} -d -a 3 - "{dest / LINUX_STATE_NAME}."',
+        args.workdir)
+    if proc.wait() != 0:
+        free = shutil.disk_usage(args.workdir).free
+        raise BuildError(f"packing state failed ({free / 2**30:.1f} GiB free at {args.workdir})")
+
+
+def unpack_state_linux(args: argparse.Namespace, source: Path) -> None:
+    parts = sorted(source.glob(LINUX_STATE_NAME + ".*"))
+    if not parts:
+        raise BuildError(f"no {LINUX_STATE_NAME}.* in {source}")
+    proc = run_bash("zstd -q -d -T0 -c | tar -xf -", args.workdir, stdin=subprocess.PIPE)
+    assert proc.stdin is not None
+    try:
+        for part in parts:
+            with open(part, "rb") as f:
+                shutil.copyfileobj(f, proc.stdin, 1 << 22)
+            # Free each volume as soon as it is read, so the archive and the
+            # restored tree never need the disk at the same time.
+            if args.delete_archive:
+                part.unlink()
+    except BrokenPipeError:
+        pass
+    proc.stdin.close()
+    if proc.wait() != 0:
+        free = shutil.disk_usage(args.workdir).free
+        raise BuildError(f"unpacking state failed ({free / 2**30:.1f} GiB free at {args.workdir})")
+
+
 def cmd_pack_state(args: argparse.Namespace) -> int:
     require_src(args.workdir)
     dest: Path = args.dest.resolve()
     if dest.exists():
         shutil.rmtree(dest)
     dest.mkdir(parents=True)
+    if not is_windows():
+        pack_state_linux(args, dest)
+        parts = sorted(dest.glob(LINUX_STATE_NAME + ".*"))
+        size = sum(p.stat().st_size for p in parts)
+        log(f"state packed: {len(parts)} volume(s), {size / 2**30:.2f} GiB in {dest}")
+        return 0
     # .git dirs are only needed for syncing; the build never reads them.
     cmd = [seven_zip(), "a", "-t7z", f"-mx={args.level}", "-mmt=on", "-snl",
            f"-v{args.volume}", "-xr!.git", "-bsp1", "-bso0",
@@ -577,12 +705,19 @@ def cmd_pack_state(args: argparse.Namespace) -> int:
 
 def cmd_unpack_state(args: argparse.Namespace) -> int:
     source: Path = args.source.resolve()
-    first = source / f"{STATE_NAME}.001"
-    if not first.is_file():
-        raise BuildError(f"no {first.name} in {source}")
     args.workdir.mkdir(parents=True, exist_ok=True)
     if src_of(args.workdir).exists():
         raise BuildError(f"{src_of(args.workdir)} already exists; refusing to overwrite")
+    if not is_windows():
+        unpack_state_linux(args, source)
+        require_src(args.workdir)
+        if args.delete_archive:
+            shutil.rmtree(source, ignore_errors=True)
+        log(f"state restored into {src_of(args.workdir)}")
+        return 0
+    first = source / f"{STATE_NAME}.001"
+    if not first.is_file():
+        raise BuildError(f"no {first.name} in {source}")
     # Chromium has ~95 relative symlinks that climb with "..\" (node_modules/.bin,
     # perfetto headers, ...). 7-Zip 25.01+ refuses those as "dangerous" and exits 2;
     # -snld20 restores them as before. Safe here: we made this archive in stage 1.
@@ -604,7 +739,7 @@ def cmd_unpack_state(args: argparse.Namespace) -> int:
 # --------------------------------------------------------------------------
 
 def parse_args(argv: list[str] | None) -> argparse.Namespace:
-    ap = argparse.ArgumentParser(description="Project Mu Windows build driver.")
+    ap = argparse.ArgumentParser(description="Project Mu build driver (Windows; Android on Linux).")
     common = argparse.ArgumentParser(add_help=False)
     common.add_argument("--workdir", type=Path,
                         default=Path(os.environ.get("MU_WORKDIR", REPO_ROOT)),
@@ -616,6 +751,8 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
     p = sub.add_parser("sync", parents=[common], help="shallow gclient checkout of a release tag")
     p.add_argument("--version", required=True)
     p.add_argument("--jobs", type=int, default=8)
+    p.add_argument("--target-os", choices=["win", "android"], default="win",
+                   help="platform to check out dependencies for (android: run on Linux)")
     p.add_argument("--allow-onedrive", action="store_true",
                    help="permit a workdir inside OneDrive (it will try to sync ~100 GB)")
     p.add_argument("--dry-run", action="store_true")
@@ -624,7 +761,9 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
     p.add_argument("--install-sdk", action="store_true",
                    help="install the Windows SDK + Debuggers if missing (needs admin)")
 
-    sub.add_parser("gen", parents=[common], help="write out/Default/args.gn and run gn gen")
+    p = sub.add_parser("gen", parents=[common], help="write out/Default/args.gn and run gn gen")
+    p.add_argument("--args", type=Path, default=ARGS_GN,
+                   help="GN args file to use (default: args.gn; Android: args.android.gn)")
 
     p = sub.add_parser("compile", parents=[common], help="build with ninja")
     p.add_argument("targets", nargs="*", default=["chrome"])
@@ -637,7 +776,13 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
 
     p = sub.add_parser("package", parents=[common], help="zip the built browser")
     p.add_argument("--version", required=True)
-    p.add_argument("--output", type=Path, default=REPO_ROOT / "project-mu-release.zip")
+    p.add_argument("--output", type=Path, default=REPO_ROOT / "project-mu-windows-x64-portable.zip")
+    p.add_argument("--installer-output", type=Path,
+                   help="also copy mini_installer.exe here (needs the mini_installer target)")
+
+    p = sub.add_parser("package-android", parents=[common],
+                       help="sign ChromePublic.apk with the release key (env: MU_ANDROID_*)")
+    p.add_argument("--output", type=Path, default=REPO_ROOT / "project-mu-android-arm64.apk")
 
     p = sub.add_parser("pack-state", parents=[common], help="archive src/ for the next CI job")
     p.add_argument("--dest", type=Path, required=True)
@@ -657,7 +802,7 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
 COMMANDS = {
     "pick-workdir": cmd_pick_workdir, "sync": cmd_sync, "doctor": cmd_doctor,
     "gen": cmd_gen, "compile": cmd_compile, "package": cmd_package,
-    "pack-state": cmd_pack_state, "unpack-state": cmd_unpack_state,
+    "package-android": cmd_package_android, "pack-state": cmd_pack_state, "unpack-state": cmd_unpack_state,
 }
 
 

@@ -1,0 +1,45 @@
+# Project Mu (無) — GN build arguments for Android
+# Copied to src/out/Default/args.gn by `scripts/build.py gen --args args.android.gn`.
+# Target: Android arm64 release APK (ChromePublic), stripped, unbranded, proprietary codecs.
+# Built on Linux; see .github/workflows/build-stage-android.yml.
+
+# --- Release shape ---------------------------------------------------------
+target_os = "android"
+target_cpu = "arm64"              # 64-bit only: no 32-bit libraries in the APK
+is_official_build = true          # full optimisation, R8-shrunk Java
+is_debug = false
+is_component_build = false
+dcheck_always_on = false
+treat_warnings_as_errors = false  # upstream warnings must not break CI
+android_channel = "stable"
+
+# PGO profiles are not checked out (checkout_pgo_profiles=False in .gclient).
+chrome_pgo_phase = 0
+
+# Plain ninja, so CI can stop and resume the build across jobs (see args.gn).
+use_siso = false
+
+# Package name. Must never change after the first public release: Android
+# treats a different package as a different app, and users would lose updates.
+chrome_public_manifest_package = "io.github.krishivvyas.mu"
+
+# --- Size -------------------------------------------------------------------
+symbol_level = 0
+blink_symbol_level = 0
+v8_symbol_level = 0
+exclude_unwind_tables = true      # smaller libchrome.so; crash stacks are not collected anyway
+enable_vr = false                 # no VR / AR / Cardboard support code
+enable_arcore = false
+enable_cardboard = false
+
+# --- No Google branding or Google services ---------------------------------
+is_chrome_branded = false
+use_official_google_api_keys = false
+google_api_key = ""
+google_default_client_id = ""
+google_default_client_secret = ""
+enable_reporting = false
+
+# --- Media: H.264 / AAC / MP3 ---------------------------------------------
+proprietary_codecs = true
+ffmpeg_branding = "Chrome"
