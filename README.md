@@ -281,13 +281,15 @@ fake "update". Create your own key once, keep it safe offline, and never
 commit it:
 
 ```powershell
-keytool -genkeypair -v -keystore mu-release.keystore -alias mu -keyalg RSA -keysize 4096 -validity 10000
+keytool -genkeypair -v -keystore mu-release.keystore -storetype PKCS12 -alias mu -keyalg RSA -keysize 4096 -validity 10000
 [Convert]::ToBase64String([IO.File]::ReadAllBytes("$PWD\mu-release.keystore")) | Set-Clipboard
 ```
 
 Then add four repository secrets under *Settings → Secrets and variables →
 Actions*: `MU_ANDROID_KEYSTORE_B64` (the clipboard), `MU_ANDROID_KEY_ALIAS`
-(`mu`), `MU_ANDROID_KEYSTORE_PASSWORD` and `MU_ANDROID_KEY_PASSWORD`. If you lose
+(`mu`), `MU_ANDROID_KEYSTORE_PASSWORD` and `MU_ANDROID_KEY_PASSWORD`. A PKCS12
+keystore uses one password for the store and the key, so both password
+secrets get the same value. If you lose
 the key, existing installs can't be updated. Users would have to uninstall and
 reinstall.
 
