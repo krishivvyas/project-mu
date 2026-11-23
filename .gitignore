@@ -24,3 +24,6 @@ project-mu-*.apk
 __pycache__/
 *.pyc
 .venv/
+
+# Chromium caches a compiled theme inside an unpacked theme folder
+Cached Theme.pak
