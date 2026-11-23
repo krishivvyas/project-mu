@@ -43,6 +43,8 @@ upstream Chromium already tests.
 | `0002` no history | Page visits are not written to the History database (the `SavingBrowserHistoryDisabled` mechanism). |
 | `0003` Google services off | No browser sign-in prompts, no Google Translate offers, no preloading or prefetching, and metrics reporting off regardless of installer consent. |
 | `0004` session returns to Mu | Cookies and site data are session-only and deleted on exit. Keep a site signed in under *Settings → Privacy → Site settings*. History, the downloads list and the cache are also deleted when the browser closes, or on the next start after a crash. |
+| `0005` hardened defaults | Third-party cookies blocked in every window. Do Not Track sent. WebRTC cannot reveal your local (LAN) IP addresses. *Always use secure connections* (HTTPS-Only) on. No `<a ping>` click-tracking beacons. The address bar no longer sends what you type to the search engine for suggestions. Mu stops running when its last window closes instead of staying in the background, so clear-on-exit really runs. |
+| `0006` own profile (Windows) | Mu keeps its profile in `%LOCALAPPDATA%\Project Mu\User Data` instead of sharing `%LOCALAPPDATA%\Chromium` with any other Chromium on the machine. |
 
 Kept on purpose: saved passwords, autofill entries and site permissions, because
 you save those deliberately. Clearing on exit only runs while browser sign-in is
@@ -55,7 +57,7 @@ ships without them.
 **On Android** the patches apply, but not all of them have the same effect.
 Android apps don't really "exit", so the clear-on-exit list from `0004` does
 not run. Session-only cookies last until Android stops the app. The Translate
-default from `0003` is a desktop setting. DuckDuckGo search, history off,
+default from `0003` and background mode from `0005` are desktop settings. DuckDuckGo search, history off,
 sign-in off, metrics off and preloading off apply on both platforms. There is
 no iOS build: outside the EU, Apple only allows WebKit browsers on iOS, so a
 Chromium-based Mu can't be shipped there.
@@ -119,7 +121,11 @@ project-mu/
 │   ├── 0002-disable-history-by-default.patch
 │   ├── 0003-strip-google-telemetry.patch
 │   ├── 0004-clear-session-on-exit.patch
+│   ├── 0005-harden-privacy-defaults.patch
+│   ├── 0006-windows-own-profile-folder.patch
 │   └── patch_order.list     # which .patch files apply, in order
+├── installer/
+│   └── project-mu.iss       # Inno Setup script for the Windows installer
 ├── scripts/
 │   ├── fetch_upstream.py    # resolve the latest version; download the source tarball
 │   ├── apply_patches.py     # sync src/ to the patch list; diagnose failures
@@ -144,7 +150,7 @@ always points at the newest build. Releases up to `r6` used the single name
 
 | File | Platform |
 |---|---|
-| `project-mu-windows-x64-setup.exe` | Windows 10/11 x64. Installs for the current user, no admin needed |
+| `project-mu-windows-x64-setup.exe` | Windows 10/11 x64. Setup wizard; installs for the current user, no admin needed |
 | `project-mu-windows-x64-portable.zip` | Windows 10/11 x64. Unzip and run `project-mu-<version>\chrome.exe` |
 | `project-mu-android-arm64.apk` | Android, 64-bit ARM phones. Only present once Android signing is set up |
 
@@ -155,10 +161,46 @@ Check a download in PowerShell (the two hashes must match):
 Get-Content .\project-mu-windows-x64-setup.exe.sha256
 ```
 
-The Windows binaries are not code-signed, so SmartScreen warns on first launch.
-Until Mu has its own branding, the installer installs as **Chromium** (in
-`%LOCALAPPDATA%\Chromium`) and shares that folder with any other Chromium build
-installed the same way.
+The Windows binaries are not code-signed, so SmartScreen warns on first launch
+(*More info → Run anyway*).
+
+The installer is a step-by-step setup wizard: **Welcome → License → Setup type
+→ Install folder → Privacy → Shortcuts → Ready → Installing → Finish**. With
+*Standard* it skips straight to Ready and uses Mu's defaults. With *Custom* you
+choose the folder, the privacy settings (delete cookies on close, block
+third-party cookies, HTTPS-Only, Do Not Track, save history, search
+suggestions) and the shortcuts. The privacy choices are written to
+`initial_preferences` next to `chrome.exe` and apply when a new profile is
+created. By default it installs for the current user to
+`%LOCALAPPDATA%\Programs\Project Mu`, with Start-menu and desktop shortcuts
+named **Project Mu**, and registers Mu as a browser. The Finish page can launch
+Mu and open *Windows Settings → Default apps* with Mu selected. It is listed in *Installed apps*
+as Project Mu, and uninstalling offers to delete the profile too. The browser's
+own window title and About page still say "Chromium" until Mu has its own
+branding.
+
+Mu's look ships next to `chrome.exe` in `mu\`: `mu\theme` is the **Sumi**
+theme (sumi `#090A0C` frame and tabs, washi `#E2E8F0` text) and `mu\newtab` is
+the New Tab page: negative space, an ensō and 無, and a DuckDuckGo search box
+that sends nothing until you press Enter. Tabs live in a slim **side rail**
+(Chromium's vertical tabs, collapsed, expanding on hover) instead of the
+top strip; the installer's *Tabs* page can switch back to classic tabs. Patch `0007` loads both on every start; the installer's shortcuts
+and the portable `Project Mu.cmd` also pass them with `--load-extension`, which
+covers builds made before `0007`. Patch `0008` removes Chromium's "Google API
+keys are missing" bar. The sources are `installer/mu-theme` and
+`installer/mu-newtab`.
+
+The rest of the look is also applied at packaging time, with no Chromium rebuild:
+`build.py package` swaps the icons in `chrome.exe` for the Mu seal
+(`installer/mu.ico`, and `mu-incognito.ico` for Incognito), and ships an
+`initial_preferences` file that gives every new profile the Sumi theme
+(Chromium's dark, grayscale colour scheme) and Mu's privacy settings. The
+artwork comes from `installer/make_art.py`.
+
+Builds up to `r11` shipped Chromium's bare `mini_installer`, which shows no
+window at all and installs as **Chromium**. If you installed one of those,
+remove it under *Settings → Apps → Installed apps → Chromium*. Check first that
+it's the one in `%LOCALAPPDATA%\Chromium` and not a separate Chromium you use.
 
 On Android, allow your browser or file manager to *install unknown apps*,
 then open the APK.
@@ -175,6 +217,8 @@ then open the APK.
 - **Windows SDK 10.0.28000** with *Debugging Tools for Windows*.
   `build.py doctor --install-sdk` installs it for you (needs an admin shell)
 - Python 3.9 or newer, and Git
+- [Inno Setup](https://jrsoftware.org/isinfo.php) 6 or 7, only to build the
+  installer (`winget install JRSoftware.InnoSetup`)
 
 ### Steps
 
@@ -197,7 +241,7 @@ python scripts\build.py doctor --install-sdk
 
 # 4. Generate, compile and package
 python scripts\build.py gen
-python scripts\build.py compile chrome mini_installer
+python scripts\build.py compile chrome
 python scripts\build.py package --version $v --installer-output project-mu-windows-x64-setup.exe
 ```
 
@@ -218,7 +262,7 @@ again and ninja continues where it left off.
 | `build.py doctor [--install-sdk]` | Check VS, Windows SDK, Debuggers, depot_tools, ninja and free disk (on Linux: depot_tools, ninja, Android SDK, disk) |
 | `build.py gen [--args FILE]` | Copy `args.gn` (or `args.android.gn`) to `out/Default` and run `gn gen` |
 | `build.py compile [targets] [--deadline T \| --budget-minutes M]` | Run ninja, stopping cleanly when time runs out (used by CI) |
-| `build.py package --version V [--installer-output F]` | Zip Chromium's official Windows file set into `project-mu-windows-x64-portable.zip`; optionally copy `mini_installer.exe` |
+| `build.py package --version V [--installer-output F]` | Zip Chromium's official Windows file set into `project-mu-windows-x64-portable.zip`; optionally build the setup wizard from the same files with Inno Setup (`installer/project-mu.iss`; set `MU_ISCC` if `ISCC.exe` isn't found) |
 | `build.py package-android` | Sign `ChromePublic.apk` with the release key into `project-mu-android-arm64.apk` |
 | `build.py pack-state` / `unpack-state` | Carry a half-built tree between CI stages (7-Zip on Windows, tar + zstd on Linux) |
 
@@ -329,11 +373,18 @@ like ink dissolving, not like "Closing 12 tabs…".
 | ✅ | `0003` sign-in, Translate, preloading and metrics off by default |
 | ✅ | `0004` cookies and site data session-only; history, downloads and cache cleared on exit |
 | ✅ | First full CI build with the patch set (`r6`) |
-| ⬜ | Windows installer (`mini_installer`) in a CI release |
+| ✅ | `0005` third-party cookies, DNT, WebRTC IP, HTTPS-Only, `<a ping>`, suggestions, background mode |
+| ✅ | `0006` separate Windows profile folder |
+| ✅ | `0007` Sumi theme and Mu New Tab page on every start; `0008` no API-key bar; `0009` no Chromium welcome screen |
+| ✅ | Side-rail (vertical) tabs by default; New Tab search box |
+| ⬜ | Mu's own toolbar and tab UI (replacing Chromium's views) |
+| ⬜ | Windows setup wizard (Inno Setup) in a CI release |
 | ⬜ | First Android arm64 release |
-| ⬜ | Sumi/Washi theme and a minimal New Tab page |
+| ✅ | Sumi (dark, grayscale) theme by default; Washi (light) in the installer |
+| ✅ | Mu icons in `chrome.exe` and the installer |
+| ⬜ | Minimal New Tab page |
 | ⬜ | Inkan "return to Mu" purge micro-interaction |
-| ⬜ | Mu branding (name, icons, `mu.exe`) |
+| ⬜ | Mu branding inside the browser (name, About page logo, `mu.exe`) |
 
 ---
 

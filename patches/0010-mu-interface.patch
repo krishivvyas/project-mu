@@ -1,0 +1,83 @@
+Project Mu: first pass at Mu's own browser interface
+
+  * No blue. Every accent in the UI (focus rings, buttons, toggles, text
+    selection, links) comes from the primary tonal palette; map each
+    primary tone to the neutral tone of the same lightness, so accents are
+    washi white / ink grey with unchanged contrast.
+  * The profile (avatar) button only appears where it means something:
+    Incognito, Guest and enterprise-isolated windows. Mu has sign-in off
+    and a single profile.
+  * Mu's built-in extensions (Sumi theme, New Tab page; patch 0007) get no
+    toolbar action, so the extensions button stays hidden until the user
+    installs an extension.
+
+diff --git a/chrome/browser/ui/toolbar/toolbar_actions_model.cc b/chrome/browser/ui/toolbar/toolbar_actions_model.cc
+index f35b42be33..8433071d74 100644
+--- a/chrome/browser/ui/toolbar/toolbar_actions_model.cc
++++ b/chrome/browser/ui/toolbar/toolbar_actions_model.cc
+@@ -354,6 +354,16 @@ bool ToolbarActionsModel::ShouldAddExtension(
+     return false;
+   }
+ 
++  // Project Mu: Mu's own look ships as two built-in extensions (the Sumi
++  // theme and the New Tab page, see patch 0007). They are part of the browser,
++  // not something the user installed, so they get no toolbar action, and with
++  // no user extensions the extensions (puzzle) button stays hidden. The IDs
++  // are pinned by the "key" in installer/mu-theme and installer/mu-newtab.
++  if (extension->id() == "ebblimmanibebmhpoohlkjkblodlenhh" ||
++      extension->id() == "dglleafhlfnloldmhefefgeollladlle") {
++    return false;
++  }
++
+   // In this case, we don't care about the browser action visibility, because
+   // we want to show each extension regardless.
+   return extension_action_manager_->GetExtensionAction(*extension) != nullptr;
+diff --git a/chrome/browser/ui/views/toolbar/avatar_toolbar_button_interface.cc b/chrome/browser/ui/views/toolbar/avatar_toolbar_button_interface.cc
+index 0275722115..c5e1830557 100644
+--- a/chrome/browser/ui/views/toolbar/avatar_toolbar_button_interface.cc
++++ b/chrome/browser/ui/views/toolbar/avatar_toolbar_button_interface.cc
+@@ -24,9 +24,11 @@ bool AvatarToolbarButtonInterface::CanShowForProfile(Profile* profile) {
+           profile->GetOTRProfileID().IsCaptivePortal());
+ #else
+   // DevTools profiles are OffTheRecord, so hide it there.
++  // Project Mu: sign-in is off and Mu uses one profile, so in a normal window
++  // the profile button is only clutter. Keep it where it says something:
++  // Incognito, Guest and enterprise-isolated windows.
+   return profile->IsIncognitoProfile() || profile->IsGuestSession() ||
+-         profile->IsEnterpriseIsolatedModeProfile() ||
+-         profile->IsRegularProfile();
++         profile->IsEnterpriseIsolatedModeProfile();
+ #endif
+ }
+ 
+diff --git a/ui/color/ref_color_mixer.cc b/ui/color/ref_color_mixer.cc
+index c94d55ee63..dad5a9e137 100644
+--- a/ui/color/ref_color_mixer.cc
++++ b/ui/color/ref_color_mixer.cc
+@@ -320,6 +320,26 @@ void AddRefColorMixer(ColorProvider* provider, const ColorProviderKey& key) {
+ 
+     AddGeneratedPalette(provider, user_color, variant);
+   }
++
++  // Project Mu: no blue. Every accent in the browser UI (focus rings, buttons,
++  // toggles, selection, links) is drawn from the primary palette; map each
++  // primary tone to the neutral tone of the same lightness, so accents become
++  // washi white and ink grey with the same contrast as before.
++  ColorMixer& mu = provider->AddMixer();
++  mu[kColorRefPrimary0] = {kColorRefNeutral0};
++  mu[kColorRefPrimary10] = {kColorRefNeutral10};
++  mu[kColorRefPrimary20] = {kColorRefNeutral20};
++  mu[kColorRefPrimary25] = {kColorRefNeutral25};
++  mu[kColorRefPrimary30] = {kColorRefNeutral30};
++  mu[kColorRefPrimary40] = {kColorRefNeutral40};
++  mu[kColorRefPrimary50] = {kColorRefNeutral50};
++  mu[kColorRefPrimary60] = {kColorRefNeutral60};
++  mu[kColorRefPrimary70] = {kColorRefNeutral70};
++  mu[kColorRefPrimary80] = {kColorRefNeutral80};
++  mu[kColorRefPrimary90] = {kColorRefNeutral90};
++  mu[kColorRefPrimary95] = {kColorRefNeutral95};
++  mu[kColorRefPrimary99] = {kColorRefNeutral99};
++  mu[kColorRefPrimary100] = {kColorRefNeutral100};
+ }
+ 
+ }  // namespace ui

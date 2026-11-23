@@ -1,0 +1,36 @@
+{
+  "distribution": {
+    "skip_first_run_ui": true,
+    "import_bookmarks": false,
+    "import_history": false,
+    "import_search_engine": false,
+    "make_chrome_default_for_user": false,
+    "suppress_first_run_default_browser_prompt": true
+  },
+  "browser": {
+    "check_default_browser": false,
+    "theme": {
+      "color_scheme2": 2,
+      "is_grayscale2": true
+    }
+  },
+  "profile": {
+    "cookie_controls_mode": 1,
+    "default_content_setting_values": {
+      "cookies": 4
+    }
+  },
+  "https_only_mode_enabled": true,
+  "enable_do_not_track": true,
+  "history": {
+    "saving_disabled": true
+  },
+  "search": {
+    "suggest_enabled": false
+  },
+  "vertical_tabs": {
+    "enabled": true,
+    "collapsed_state": true,
+    "expand_on_hover": true
+  }
+}

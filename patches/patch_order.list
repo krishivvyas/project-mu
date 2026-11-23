@@ -8,3 +8,9 @@
 0002-disable-history-by-default.patch
 0003-strip-google-telemetry.patch
 0004-clear-session-on-exit.patch
+0005-harden-privacy-defaults.patch
+0006-windows-own-profile-folder.patch
+0007-load-mu-look.patch
+0008-no-api-key-infobar.patch
+0009-no-first-run-welcome.patch
+0010-mu-interface.patch

@@ -1,0 +1,25 @@
+Project Mu: give Mu its own profile folder on Windows
+
+kProductPathName names the folder under %LOCALAPPDATA% that holds the
+browser's User Data, and the HKCU\Software key it writes. Upstream it is
+"Chromium", so Mu shared its profile with any other Chromium on the machine,
+and another Chromium's history or cookies could end up in Mu (and the other
+way round). Mu now uses %LOCALAPPDATA%\Project Mu\User Data.
+
+Windows only; the file is not built on other platforms.
+
+diff --git a/chrome/install_static/chromium_install_modes.h b/chrome/install_static/chromium_install_modes.h
+index a6d969d..7c24e5b 100644
+--- a/chrome/install_static/chromium_install_modes.h
++++ b/chrome/install_static/chromium_install_modes.h
+@@ -21,7 +21,9 @@ inline constexpr wchar_t kCompanyPathName[] = L"";
+ 
+ // The brand-specific product name to be included as a component of the install
+ // and user data directory paths.
+-inline constexpr wchar_t kProductPathName[] = L"Chromium";
++// Project Mu: keep Mu's profile (%LOCALAPPDATA%\Project Mu\User Data) and
++// registry key (HKCU\Software\Project Mu) apart from any other Chromium.
++inline constexpr wchar_t kProductPathName[] = L"Project Mu";
+ 
+ // The brand-specific safe browsing client name.
+ inline constexpr char kSafeBrowsingName[] = "chromium";

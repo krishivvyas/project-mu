@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>New Tab</title>
+<link rel="icon" href="icons/mu-32.png">
+<link rel="stylesheet" href="newtab.css">
+</head>
+<body>
+<main>
+  <div class="mark">
+    <svg class="enso" viewBox="0 0 200 200" aria-hidden="true">
+      <path d="M150 42 A72 72 0 1 0 172 96" fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round"/>
+    </svg>
+    <div class="mu" aria-label="Mu">無</div>
+  </div>
+  <!-- Nothing is sent until Enter: no suggestions, no requests while typing. -->
+  <form class="search" action="https://duckduckgo.com/" method="get" role="search" autocomplete="off">
+    <input id="q" name="q" type="search" placeholder="Search privately with DuckDuckGo" aria-label="Search" spellcheck="false" autofocus>
+  </form>
+  <p class="line">This session returns to nothing when the window closes.</p>
+</main>
+<script src="newtab.js"></script>
+</body>
+</html>

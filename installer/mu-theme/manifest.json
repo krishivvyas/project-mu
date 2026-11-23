@@ -1,0 +1,135 @@
+{
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA1ZUtKbWGEd4ffzRlPkXnOcTg8ZY518rzE05XDJNnGr9MOmpOEVlUBoYKOTi/Q6oHwo5I/kaqiP/QaLKcwaRSfbwIfSPtsNszvK88jJrYnzk0EJK4wAzQXvIB11sHQClG5BzWdRsweEDxa2or2iw3H5awQQUrnbzbFHuaF7KwGvfMf/hp25+VAHEZlQeiJaIB4tu9Pe5xYhIC8XpR9S7eiJN9rrSbOoQdRoO1x1WMGnMFZ0F40h6ADvt5Dfr4QvHwTbPw/GslRfKSOMaEjU57jik8l+LRBMIIhHuimQkFXnAplqAnwqvXmHxIqsAdHGwZ1jrn1NtbvMrWcUVoUD/xMwIDAQAB",
+  "manifest_version": 3,
+  "name": "Mu Sumi",
+  "version": "1.0",
+  "description": "Project Mu's theme: sumi ink, kiri slate and washi paper.",
+  "theme": {
+    "colors": {
+      "frame": [
+        9,
+        10,
+        12
+      ],
+      "frame_inactive": [
+        9,
+        10,
+        12
+      ],
+      "frame_incognito": [
+        9,
+        10,
+        12
+      ],
+      "frame_incognito_inactive": [
+        9,
+        10,
+        12
+      ],
+      "background_tab": [
+        9,
+        10,
+        12
+      ],
+      "background_tab_inactive": [
+        9,
+        10,
+        12
+      ],
+      "background_tab_incognito": [
+        9,
+        10,
+        12
+      ],
+      "background_tab_incognito_inactive": [
+        9,
+        10,
+        12
+      ],
+      "toolbar": [
+        30,
+        32,
+        36
+      ],
+      "toolbar_text": [
+        226,
+        232,
+        240
+      ],
+      "toolbar_button_icon": [
+        226,
+        232,
+        240
+      ],
+      "tab_text": [
+        226,
+        232,
+        240
+      ],
+      "tab_background_text": [
+        120,
+        128,
+        140
+      ],
+      "tab_background_text_inactive": [
+        90,
+        96,
+        106
+      ],
+      "tab_background_text_incognito": [
+        120,
+        128,
+        140
+      ],
+      "tab_background_text_incognito_inactive": [
+        90,
+        96,
+        106
+      ],
+      "bookmark_text": [
+        226,
+        232,
+        240
+      ],
+      "omnibox_background": [
+        9,
+        10,
+        12
+      ],
+      "omnibox_text": [
+        226,
+        232,
+        240
+      ],
+      "ntp_background": [
+        9,
+        10,
+        12
+      ],
+      "ntp_text": [
+        226,
+        232,
+        240
+      ],
+      "ntp_link": [
+        226,
+        232,
+        240
+      ],
+      "ntp_header": [
+        30,
+        32,
+        36
+      ],
+      "button_background": [
+        30,
+        32,
+        36,
+        0
+      ]
+    },
+    "properties": {
+      "ntp_background_alignment": "center"
+    }
+  }
+}

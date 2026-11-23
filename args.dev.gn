@@ -1,0 +1,31 @@
+# Project Mu (無) — GN args for local UI development on Windows.
+# Use: python scripts\build.py gen --args args.dev.gn
+#
+# Same browser as args.gn (Mu patches, no Google services or keys), but built
+# for fast iteration: a component build links many small DLLs instead of one
+# 350 MB chrome.dll, so changing one UI file rebuilds in minutes, not hours.
+# Never ship this build; releases use args.gn.
+
+is_official_build = false
+is_debug = false
+is_component_build = true
+dcheck_always_on = false
+treat_warnings_as_errors = false
+target_cpu = "x64"
+use_siso = false
+
+symbol_level = 0
+blink_symbol_level = 0
+v8_symbol_level = 0
+
+is_chrome_branded = false
+use_official_google_api_keys = false
+google_api_key = ""
+google_default_client_id = ""
+google_default_client_secret = ""
+enable_hangout_services_extension = false
+enable_remoting = false
+enable_reporting = false
+
+proprietary_codecs = true
+ffmpeg_branding = "Chrome"

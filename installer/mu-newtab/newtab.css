@@ -1,0 +1,31 @@
+/* Project Mu New Tab: Ma (negative space). Nothing here makes a request
+   until you search. */
+:root {
+  --sumi: #090a0c;   /* void black */
+  --kiri: #1e2024;   /* misty slate */
+  --washi: #e2e8f0;  /* rice paper */
+  --mist: #5a606a;
+  --inkan: #dc2626;  /* seal red */
+}
+html, body { height: 100%; margin: 0; background: var(--sumi); color: var(--washi); }
+body { display: grid; place-items: center; font-family: "Segoe UI", system-ui, sans-serif; }
+main { display: flex; flex-direction: column; align-items: center; gap: 28px; transform: translateY(-5vh); width: min(560px, 86vw); }
+
+.mark { position: relative; width: 200px; height: 200px; display: grid; place-items: center; user-select: none; }
+.enso { position: absolute; inset: 0; width: 100%; height: 100%; color: var(--kiri); }
+.mu { font-family: "Yu Mincho", "MS Mincho", serif; font-weight: 600; font-size: 78px; line-height: 1; color: var(--washi); opacity: .9; }
+
+.search { width: 100%; }
+.search input {
+  box-sizing: border-box; width: 100%; height: 48px; padding: 0 20px;
+  font: 15px "Segoe UI", system-ui, sans-serif; letter-spacing: .01em;
+  color: var(--washi); background: var(--kiri);
+  border: 1px solid #2a2d33; border-radius: 24px; outline: none;
+  transition: border-color .25s ease, background .25s ease;
+}
+.search input::placeholder { color: var(--mist); }
+.search input:hover { border-color: #3a3e46; }
+.search input:focus { border-color: var(--washi); background: #15171a; }
+.search input::-webkit-search-cancel-button { filter: invert(.8); }
+
+.line { margin: 0; font-size: 13px; letter-spacing: .04em; color: var(--mist); user-select: none; }

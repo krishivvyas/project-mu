@@ -146,8 +146,30 @@ jobs:
 
       - name: Compile
         id: compile
-        # mini_installer adds setup.exe and the LZMA-compressed installer on top of chrome.
-        run: python scripts/build.py compile chrome mini_installer --deadline ${{ steps.plan.outputs.deadline }}
+        # Only the browser: the installer is built by Inno Setup at packaging
+        # time, not by Chromium's mini_installer target.
+        run: python scripts/build.py compile chrome --deadline ${{ steps.plan.outputs.deadline }}
+
+      - name: Install Inno Setup
+        if: steps.compile.outputs.done == 'true'
+        run: |
+          function Find-Iscc {
+            foreach ($base in $env:ProgramFiles, ${env:ProgramFiles(x86)}) {
+              foreach ($major in 7, 6) {
+                $c = Join-Path $base "Inno Setup $major\ISCC.exe"
+                if (Test-Path $c) { return $c }
+              }
+            }
+          }
+          $iscc = Find-Iscc
+          if (-not $iscc) {
+            choco install innosetup -y --no-progress
+            if ($LASTEXITCODE -ne 0) { throw "choco install innosetup failed ($LASTEXITCODE)" }
+            $iscc = Find-Iscc
+          }
+          if (-not $iscc) { throw "ISCC.exe not found after installing Inno Setup" }
+          Write-Host "using $iscc"
+          "MU_ISCC=$iscc" >> $env:GITHUB_ENV
 
       - name: Package browser
         if: steps.compile.outputs.done == 'true'

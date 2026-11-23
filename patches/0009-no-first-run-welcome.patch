@@ -1,0 +1,27 @@
+Project Mu: never show Chromium's first-run welcome screen
+
+The welcome ("The browser that gets more done") leads into browser sign-in and
+sync, which Mu turns off. Upstream skips it when sign-in is disabled, but on a
+new profile that check could run before initial_preferences were applied, so
+the screen appeared on some first launches. Mu never opens it; the rest of
+first-run processing, including initial_preferences, is unchanged.
+
+diff --git a/chrome/browser/ui/startup/first_run_service.cc b/chrome/browser/ui/startup/first_run_service.cc
+index 7ba1ffb..1b951bf 100644
+--- a/chrome/browser/ui/startup/first_run_service.cc
++++ b/chrome/browser/ui/startup/first_run_service.cc
+@@ -298,6 +298,12 @@ FirstRunServiceFactory::BuildServiceInstanceForBrowserContext(
+ // Helpers ---------------------------------------------------------------------
+ 
+ bool ShouldOpenFirstRun(Profile* profile) {
+-  return IsFirstRunEligibleProcess() && IsFirstRunEligibleProfile(profile) &&
+-         !IsFirstRunMarkedFinishedInPrefs();
++  // Project Mu: never show Chromium's first-run welcome ("The browser that
++  // gets more done"). It is a sign-in and sync funnel, and Mu has sign-in off.
++  // Upstream normally skips it when sign-in is disabled, but that check runs
++  // before a new profile's initial_preferences are applied, so it sometimes
++  // showed anyway. First-run processing itself (initial_preferences) still runs.
++  return false && IsFirstRunEligibleProcess() &&
++         IsFirstRunEligibleProfile(profile) &&
++         !IsFirstRunMarkedFinishedInPrefs();
+ }

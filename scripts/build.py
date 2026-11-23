@@ -8,7 +8,7 @@ Subcommands (run in this order on a fresh machine):
     doctor   [--install-sdk]     verify VS / Windows SDK / Debuggers / tools
     gen      [--args FILE]       copy args.gn into out/Default and run `gn gen`
     compile  [--deadline EPOCH]  run ninja; stop cleanly at the deadline
-    package  --version V         zip the browser (and copy the installer)
+    package  --version V         zip the browser (and build the Inno Setup installer)
     package-android              sign ChromePublic.apk with the release key
     pack-state / unpack-state    carry a half-finished build between CI jobs
 
@@ -30,6 +30,7 @@ import re
 import shutil
 import signal
 import string
+import struct
 import subprocess
 import sys
 import tempfile
@@ -49,6 +50,10 @@ STATE_NAME = "mu-state.7z"
 # restored as a stream so the archive and the tree never both fill the disk.
 LINUX_STATE_NAME = "mu-state.tar.zst"
 ANDROID_APK = OUT_REL / "apks" / "ChromePublic.apk"
+INSTALLER_DIR = REPO_ROOT / "installer"
+INSTALLER_ISS = INSTALLER_DIR / "project-mu.iss"
+# Copied into each new profile on first run: Mu's theme and privacy settings.
+INITIAL_PREFS = INSTALLER_DIR / "initial_preferences"
 
 # Windows SDK 10.0.28000.2957 (September 2026), official Microsoft fwlink.
 # Override with MU_WINSDK_URL when Chromium starts requiring a newer SDK.
@@ -352,6 +357,13 @@ def cmd_doctor(args: argparse.Namespace) -> int:
             ok = not wanted or any(v.split(".")[0] == major for v in wanted.values())
             report(ok, f"Visual Studio {vs[1]} at {vs[0]}",
                    f"Chromium supports VS {', '.join(sorted(wanted))}")
+            # base/ includes <atldef.h>; without ATL the build fails ~2,000
+            # steps in with "'atldef.h' file not found".
+            has_atl = bool(glob.glob(os.path.join(
+                glob.escape(vs[0]), "VC", "Tools", "MSVC", "*", "atlmfc", "include", "atldef.h")))
+            report(has_atl, "C++ ATL/MFC in that Visual Studio",
+                   "Visual Studio Installer > Modify > Individual components > "
+                   "'C++ ATL for latest build tools (x86 & x64)' and the MFC equivalent")
         else:
             report(False, "Visual Studio with C++ workload", "install VS with Desktop C++ + ATL/MFC")
 
@@ -552,37 +564,215 @@ def cmd_package(args: argparse.Namespace) -> int:
     root = f"project-mu-{args.version}"
     dest: Path = args.output.resolve()
     dest.parent.mkdir(parents=True, exist_ok=True)
-    tmp = dest.with_name(dest.name + ".tmp")
-    total = 0
-    with zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED, compresslevel=6) as z:
-        for rel in chosen:
-            z.write(out / rel, f"{root}/{rel}")
-            total += (out / rel).stat().st_size
-        z.write(REPO_ROOT / "LICENSE", f"{root}/LICENSE-project-mu.txt")
-        z.writestr(f"{root}/VERSION", args.version + "\n")
-    os.replace(tmp, dest)
-    digest = write_sha256(dest)
-    log(f"packaged {len(chosen)} files ({total / 2**20:.0f} MiB raw) into {dest} "
-        f"({dest.stat().st_size / 2**20:.0f} MiB)")
-    log(f"sha256 {digest}")
+    with tempfile.TemporaryDirectory(prefix="mu-pkg-") as staging:
+        # Published path -> file on disk. Mu's branding and first-run settings
+        # are applied here, after compiling, so they need no Chromium rebuild.
+        sources = {rel: out / rel for rel in chosen}
+        for binary, groups in BRANDED_ICONS.items():
+            sources[binary] = brand_icons(out / binary, Path(staging), groups)
+        sources["initial_preferences"] = INITIAL_PREFS
+        sources["LICENSE-project-mu.txt"] = REPO_ROOT / "LICENSE"
+        # Mu's look: the Sumi theme and the New Tab page (patch 0007 loads them).
+        for folder, published in (("mu-theme", "mu/theme"), ("mu-newtab", "mu/newtab")):
+            base = INSTALLER_DIR / folder
+            for f in sorted(base.rglob("*")):
+                if f.is_file():
+                    sources[f"{published}/{f.relative_to(base).as_posix()}"] = f
+        sources["Project Mu.cmd"] = INSTALLER_DIR / "Project Mu.cmd"
 
-    if args.installer_output:
-        # mini_installer.exe holds chrome.7z (LZMA) and setup.exe, so it is
-        # roughly half the size of the portable zip.
-        installer = out / "mini_installer.exe"
-        if not installer.is_file():
-            raise BuildError(f"{installer} missing (compile the `mini_installer` target)")
-        idest: Path = args.installer_output.resolve()
-        idest.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(installer, idest)
-        log(f"installer {idest} ({idest.stat().st_size / 2**20:.0f} MiB), sha256 {write_sha256(idest)}")
+        tmp = dest.with_name(dest.name + ".tmp")
+        total = 0
+        with zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED, compresslevel=6) as z:
+            for rel, path in sources.items():
+                z.write(path, f"{root}/{rel}")
+                total += path.stat().st_size
+            z.writestr(f"{root}/VERSION", args.version + "\n")
+        os.replace(tmp, dest)
+        digest = write_sha256(dest)
+        log(f"packaged {len(sources)} files ({total / 2**20:.0f} MiB raw) into {dest} "
+            f"({dest.stat().st_size / 2**20:.0f} MiB)")
+        log(f"sha256 {digest}")
+
+        if args.installer_output:
+            build_installer(sources, args.version, args.installer_output.resolve())
     return 0
+
+
+# --------------------------------------------------------------------------
+# Branding (Windows): Mu's icons in chrome.exe and chrome.dll
+# --------------------------------------------------------------------------
+
+# Icon groups to replace, per binary, and the Mu icon for each. The first group
+# listed for a binary must exist (it is the one that matters).
+BRANDED_ICONS: dict[str, dict] = {
+    # chrome/app/chrome_exe.rc. IDR_MAINFRAME is the file / shortcut icon.
+    "chrome.exe": {
+        "IDR_MAINFRAME": "mu.ico",
+        "IDR_X001_APP_LIST": "mu.ico",
+        "IDR_X003_INCOGNITO": "mu-incognito.ico",
+        "IDR_X006_HTML_DOC": "mu.ico",
+        "IDR_X007_PDF_DOC": "mu.ico",
+        "IDR_X008_ISOLATED": "mu.ico",
+        "IDR_X009_OMNIBOX_EVERYWHERE": "mu.ico",
+    },
+    # chrome/app/chrome_dll.rc: IDR_MAINFRAME (101) is the window and taskbar
+    # icon of a running browser. 102-125 are the loading-spinner frames.
+    "chrome.dll": {101: "mu.ico"},
+}
+RT_ICON, RT_GROUP_ICON = 3, 14
+LANG_EN_US = 1033
+
+
+def read_ico(path: Path) -> list[tuple[bytes, bytes]]:
+    """Return (GRPICONDIRENTRY prefix without nID, image data) per icon image."""
+    data = path.read_bytes()
+    reserved, kind, count = struct.unpack_from("<HHH", data, 0)
+    if reserved != 0 or kind != 1 or count == 0:
+        raise BuildError(f"{path} is not an .ico file")
+    images = []
+    for i in range(count):
+        w, h, colors, res, planes, bpp, size, offset = struct.unpack_from("<BBBBHHII", data, 6 + 16 * i)
+        prefix = struct.pack("<BBBBHHI", w, h, colors, res, planes, bpp, size)
+        images.append((prefix, data[offset:offset + size]))
+    return images
+
+
+def brand_icons(exe: Path, staging: Path, icon_groups: dict) -> Path:
+    """Copy a binary into staging with Mu's icons in place of Chromium's.
+
+    Uses the Win32 resource-update API, so it needs Windows but no extra tools.
+    """
+    if not is_windows():
+        raise BuildError(f"branding {exe.name} needs Windows (Win32 resource API)")
+    import ctypes
+    from ctypes import wintypes as W
+
+    branded = staging / exe.name
+    shutil.copyfile(exe, branded)
+    k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    k32.LoadLibraryExW.restype = W.HMODULE
+    k32.LoadLibraryExW.argtypes = [W.LPCWSTR, W.HANDLE, W.DWORD]
+    k32.FreeLibrary.argtypes = [W.HMODULE]
+    name_proc = ctypes.WINFUNCTYPE(W.BOOL, W.HMODULE, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p)
+    k32.EnumResourceNamesW.argtypes = [W.HMODULE, ctypes.c_void_p, name_proc, ctypes.c_void_p]
+    k32.BeginUpdateResourceW.restype = W.HANDLE
+    k32.BeginUpdateResourceW.argtypes = [W.LPCWSTR, W.BOOL]
+    k32.UpdateResourceW.argtypes = [W.HANDLE, ctypes.c_void_p, ctypes.c_void_p, W.WORD,
+                                    ctypes.c_void_p, W.DWORD]
+    k32.EndUpdateResourceW.argtypes = [W.HANDLE, W.BOOL]
+
+    def names(module, rtype) -> list:
+        found: list = []
+
+        def cb(_m, _t, name, _p):
+            found.append(name if name < 0x10000 else ctypes.wstring_at(name))
+            return True
+        k32.EnumResourceNamesW(module, rtype, name_proc(cb), None)
+        return found
+
+    # LOAD_LIBRARY_AS_DATAFILE | LOAD_LIBRARY_AS_IMAGE_RESOURCE
+    module = k32.LoadLibraryExW(str(branded), None, 0x2 | 0x20)
+    if not module:
+        raise BuildError(f"cannot read resources of {exe} (error {ctypes.get_last_error()})")
+    try:
+        next_id = max(names(module, RT_ICON), default=0) + 1
+        groups = set(names(module, RT_GROUP_ICON))
+    finally:
+        k32.FreeLibrary(module)
+    missing = [g for g in icon_groups if g not in groups]
+    main = next(iter(icon_groups))
+    if main in missing:
+        raise BuildError(f"{exe} has no {main} icon group; upstream renamed it?")
+
+    handle = k32.BeginUpdateResourceW(str(branded), False)
+    if not handle:
+        raise BuildError(f"cannot update {branded} (error {ctypes.get_last_error()})")
+    ok = False
+    try:
+        icon_ids: dict[str, list[tuple[bytes, int]]] = {}
+        for group, ico_name in icon_groups.items():
+            if group in missing:
+                log(f"note: {exe.name} has no {group} icon; skipped")
+                continue
+            if ico_name not in icon_ids:  # add each .ico's images once, share them
+                entries = []
+                for prefix, image in read_ico(INSTALLER_DIR / ico_name):
+                    buf = ctypes.create_string_buffer(image, len(image))
+                    if not k32.UpdateResourceW(handle, RT_ICON, next_id, LANG_EN_US, buf, len(image)):
+                        raise BuildError(f"UpdateResource(RT_ICON) failed ({ctypes.get_last_error()})")
+                    entries.append((prefix, next_id))
+                    next_id += 1
+                icon_ids[ico_name] = entries
+            entries = icon_ids[ico_name]
+            grp = struct.pack("<HHH", 0, 1, len(entries)) + b"".join(
+                prefix + struct.pack("<H", rid) for prefix, rid in entries)
+            gname = ctypes.create_unicode_buffer(group) if isinstance(group, str) else None
+            gbuf = ctypes.create_string_buffer(grp, len(grp))
+            name_arg = ctypes.addressof(gname) if gname is not None else group
+            if not k32.UpdateResourceW(handle, RT_GROUP_ICON, name_arg, LANG_EN_US,
+                                       gbuf, len(grp)):
+                raise BuildError(f"UpdateResource({group}) failed ({ctypes.get_last_error()})")
+        ok = True
+    finally:
+        if not k32.EndUpdateResourceW(handle, not ok) and ok:
+            raise BuildError(f"EndUpdateResource failed ({ctypes.get_last_error()})")
+    log(f"branded {exe.name} with Mu icons ({len(icon_groups) - len(missing)} icon groups)")
+    return branded
+
+
+def find_iscc() -> str:
+    """Locate Inno Setup's command-line compiler (env MU_ISCC overrides)."""
+    candidates = [os.environ.get("MU_ISCC", ""), shutil.which("iscc") or ""]
+    for var in ("ProgramFiles", "ProgramFiles(x86)", "LOCALAPPDATA"):
+        base = os.environ.get(var)
+        for major in ("7", "6"):  # the .iss works with Inno Setup 6 and 7
+            if base:
+                candidates.append(os.path.join(base, f"Inno Setup {major}", "ISCC.exe"))
+                candidates.append(os.path.join(base, "Programs", f"Inno Setup {major}", "ISCC.exe"))
+    for c in candidates:
+        if c and Path(c).is_file():
+            return c
+    raise BuildError("Inno Setup not found (needed for --installer-output). Install it with "
+                     "`winget install JRSoftware.InnoSetup` or `choco install innosetup`, "
+                     "or set MU_ISCC to ISCC.exe")
+
+
+def build_installer(sources: dict[str, Path], version: str, dest: Path) -> None:
+    """Compile installer/project-mu.iss over the same files as the portable zip.
+
+    Chromium's own mini_installer has no UI, installs as "Chromium" and shares
+    that product's folders, so Mu ships an Inno Setup wizard instead.
+    """
+    iscc = find_iscc()
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix="mu-iss-") as tmp:
+        files_iss = Path(tmp) / "files.iss"
+        lines = []
+        for rel, path in sources.items():
+            sub = str(Path(rel).parent).replace("/", "\\")
+            destdir = "{app}" if sub in ("", ".") else "{app}\\" + sub
+            name = Path(rel).name
+            lines.append(f'Source: "{path.resolve()}"; DestDir: "{destdir}"; '
+                         f'DestName: "{name}"; Flags: ignoreversion')
+        files_iss.write_text("\n".join(lines) + "\n", encoding="utf-8-sig")
+        cmd = [iscc, "/Qp", f"/DMuVersion={version}", f"/DMuFiles={files_iss}",
+               f"/DMuLicense={REPO_ROOT / 'LICENSE'}", f"/O{dest.parent}", f"/F{dest.stem}",
+               str(INSTALLER_ISS)]
+        log(f"building installer with {iscc} ({len(sources)} files; LZMA2, takes a few minutes)")
+        res = subprocess.run(cmd)
+        if res.returncode != 0:
+            raise BuildError(f"Inno Setup compiler exited {res.returncode}")
+    if dest.suffix.lower() != ".exe" or not dest.is_file():
+        raise BuildError(f"installer not written to {dest} (the output name must end in .exe)")
+    log(f"installer {dest} ({dest.stat().st_size / 2**20:.0f} MiB), sha256 {write_sha256(dest)}")
 
 
 def write_sha256(path: Path) -> str:
     """Write <path>.sha256 in `sha256sum -c` format and return the digest."""
     digest = sha256_file(path)
-    path.with_name(path.name + ".sha256").write_text(f"{digest}  {path.name}\n", encoding="utf-8")
+    # LF even on Windows: `sha256sum -c` on Linux/macOS rejects a CRLF line.
+    path.with_name(path.name + ".sha256").write_text(f"{digest}  {path.name}\n",
+                                                     encoding="utf-8", newline="\n")
     return digest
 
 
@@ -778,7 +968,7 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
     p.add_argument("--version", required=True)
     p.add_argument("--output", type=Path, default=REPO_ROOT / "project-mu-windows-x64-portable.zip")
     p.add_argument("--installer-output", type=Path,
-                   help="also copy mini_installer.exe here (needs the mini_installer target)")
+                   help="also build the Inno Setup installer (installer/project-mu.iss) here")
 
     p = sub.add_parser("package-android", parents=[common],
                        help="sign ChromePublic.apk with the release key (env: MU_ANDROID_*)")
