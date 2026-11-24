@@ -1,0 +1,21 @@
+Project Mu: quieter address bar
+
+The focused address bar draws Chromium's global keyboard-focus ring, which
+patch 0010 turns washi white: a heavy outline on Mu's dark toolbar. Use the
+neutral outline grey for the address bar only; every other control keeps the
+high-contrast focus ring for keyboard users.
+
+diff --git a/chrome/browser/ui/views/location_bar/location_bar_view.cc b/chrome/browser/ui/views/location_bar/location_bar_view.cc
+index 5a4f868185..ea98fb14a8 100644
+--- a/chrome/browser/ui/views/location_bar/location_bar_view.cc
++++ b/chrome/browser/ui/views/location_bar/location_bar_view.cc
+@@ -258,5 +258,9 @@ LocationBarView::LocationBarView(BrowserWindowInterface* browser,
+         }));
+     views::FocusRing::Get(this)->SetOutsetFocusRingDisabled(true);
++    // Project Mu: a quiet grey ring around the focused address bar instead
++    // of the global (washi white) keyboard-focus color, which reads as a
++    // heavy outline on Mu's dark toolbar.
++    views::FocusRing::Get(this)->SetColorId(ui::kColorSysNeutralOutline);
+     views::InstallPillHighlightPathGenerator(this);
+ 
+ #if BUILDFLAG(OS_LEVEL_GEOLOCATION_PERMISSION_SUPPORTED)

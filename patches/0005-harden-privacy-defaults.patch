@@ -14,21 +14,6 @@ Default-value changes only; every setting stays user-adjustable in Settings:
   * background_mode.enabled -> false (Windows/Linux: the browser exits when
     the last window closes, so 0004's clear-on-exit actually runs)
 
-diff --git a/chrome/browser/background/extensions/background_mode_manager.cc b/chrome/browser/background/extensions/background_mode_manager.cc
-index 16e28b4..819e4b6 100644
---- a/chrome/browser/background/extensions/background_mode_manager.cc
-+++ b/chrome/browser/background/extensions/background_mode_manager.cc
-@@ -351,7 +351,9 @@ BackgroundModeManager::~BackgroundModeManager() {
- 
- // static
- void BackgroundModeManager::RegisterPrefs(PrefRegistrySimple* registry) {
--  registry->RegisterBooleanPref(prefs::kBackgroundModeEnabled, true);
-+  // Project Mu: do not keep running in the background after the last window
-+  // closes, so the session really ends (and clear-on-exit runs) on close.
-+  registry->RegisterBooleanPref(prefs::kBackgroundModeEnabled, false);
- }
- 
- void BackgroundModeManager::RegisterProfile(Profile* profile) {
 diff --git a/chrome/browser/chrome_content_browser_client.cc b/chrome/browser/chrome_content_browser_client.cc
 index 565bd58..d5e5efd 100644
 --- a/chrome/browser/chrome_content_browser_client.cc
@@ -43,6 +28,21 @@ index 565bd58..d5e5efd 100644
    // Register user prefs for mapping SitePerProcess and IsolateOrigins in
    // user policy in addition to the same named ones in Local State (which are
    // used for mapping the command-line flags).
+diff --git a/chrome/browser/prefs/browser_prefs.cc b/chrome/browser/prefs/browser_prefs.cc
+index fdd05fa..e99d3e1 100644
+--- a/chrome/browser/prefs/browser_prefs.cc
++++ b/chrome/browser/prefs/browser_prefs.cc
+@@ -1816,6 +1816,10 @@ void RegisterLocalState(PrefRegistrySimple* registry) {
+ 
+ #if BUILDFLAG(ENABLE_BACKGROUND_MODE)
+   BackgroundModeManager::RegisterPrefs(registry);
++  // Project Mu: do not keep running in the background after the last window
++  // closes, so the session really ends (and clear-on-exit runs) on close.
++  registry->SetDefaultPrefValue(prefs::kBackgroundModeEnabled,
++                                base::Value(false));
+ #endif
+ 
+ #if BUILDFLAG(IS_ANDROID)
 diff --git a/chrome/browser/profiles/profile.cc b/chrome/browser/profiles/profile.cc
 index 82b9a6f..3788bad 100644
 --- a/chrome/browser/profiles/profile.cc
