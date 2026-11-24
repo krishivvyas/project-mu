@@ -449,11 +449,66 @@ CHROMIUM_WORD = re.compile(
     r'\bChromium\b(?!\s?OS\b| Authors\b| Projects\b|\.org|<ph name="END_LINK_CHROMIUM"| open source project)')
 GRD_MESSAGE = re.compile(r"(<message\b[^>]*>)(.*?)(</message>)", re.S)
 
+# Private browsing is called Kage (影, "shadow": you pass through and leave
+# nothing) in Mu's interface instead of Incognito. Every English string file
+# that says "Incognito" in a Chromium build (not the Google Chrome-only files,
+# and not the omnibox pedals, which are typed trigger phrases). All of them
+# set fallback_to_english, like PRODUCT_STRINGS.
+PRIVATE_MODE_NAME = "Kage"
+PRIVATE_MODE_STRINGS = [
+    *(Path("chrome") / "app" / name for name in (
+        "generated_resources.grd", "chromium_strings.grd", "bookmarks_strings.grdp",
+        "settings_strings.grdp", "settings_chromium_strings.grdp",
+        "profiles_strings.grdp", "extensions_strings.grdp")),
+    *(Path("components") / name for name in (
+        "new_or_sad_tab_strings.grdp", "privacy_sandbox_strings.grd",
+        "security_interstitials_strings.grdp", "error_page_strings.grdp",
+        "payments_strings.grdp", "page_info_strings.grdp",
+        "history_clusters_strings.grdp")),
+]
+INCOGNITO_ARTICLE = re.compile(r"\b([Aa])n (?=Incognito\b)")  # "an Incognito" -> "a Kage"
+INCOGNITO_WORD = re.compile(r"\bIncognito\b")
+
+
+def rewrite_messages(path: Path, fn) -> int:
+    """Apply fn(body) -> (body, count) to every <message> body in a .grd/.grdp
+    file; write it only if something changed. Returns the count."""
+    text = path.read_bytes().decode("utf-8")  # keep line endings as they are
+    count = 0
+
+    def one(m: re.Match) -> str:
+        nonlocal count
+        body, n = fn(m.group(2))
+        count += n
+        return m.group(1) + body + m.group(3)
+
+    new_text = GRD_MESSAGE.sub(one, text)
+    if count:
+        path.write_bytes(new_text.encode("utf-8"))
+    return count
+
+
+def rename_private_mode(body: str) -> tuple[str, int]:
+    body = INCOGNITO_ARTICLE.sub(lambda m: m.group(1), body)
+    return INCOGNITO_WORD.subn(PRIVATE_MODE_NAME, body)
+
 
 # English strings Mu words differently, by message name. Mu has no Google
 # account features, so the Settings headings that name Google say what the
 # pages hold. Same fallback_to_english rule as PRODUCT_STRINGS.
 STRING_OVERRIDES = {
+    Path("chrome") / "app" / "chromium_strings.grd": {
+        # App menu section with passwords, history, downloads, bookmarks.
+        "IDS_APP_MENU_YOUR_CHROME_HEADER": "Your data",               # "Your Chromium"
+        "IDS_NTP_CUSTOMIZE_TOOLBAR_CATEGORY_YOUR_CHROME": "Your data",
+        # Name shown for a profile the user never named.
+        "IDS_PROFILE_MENU_PLACEHOLDER_PROFILE_NAME": "Profile",        # "Your Chromium"
+    },
+    Path("components") / "new_or_sad_tab_strings.grdp": {
+        # Kage (private window) page heading; "You've gone Kage" reads oddly.
+        "IDS_NEW_TAB_OTR_TITLE": "You’re in Kage",                    # "You’ve gone Incognito"
+        "IDS_NEW_TAB_OTR_HEADING": "You’re in Kage",
+    },
     Path("chrome") / "app" / "settings_strings.grdp": {
         "IDS_SETTINGS_PEOPLE": "Profile",                           # "You and Google"
         "IDS_SETTINGS_GOOGLE_SERVICES_PAGE_TITLE": "Services",      # "Google services"
@@ -496,24 +551,18 @@ def rebrand_strings(src: Path) -> None:
     as is, mtime included."""
     total = 0
     for rel in PRODUCT_STRINGS:
-        path = src / rel
-        if not path.is_file():
+        if not (src / rel).is_file():
             log(f"product strings: {rel} not found, skipped")
             continue
-        text = path.read_bytes().decode("utf-8")  # keep line endings as they are
-        count = 0
-
-        def rename(m: re.Match) -> str:
-            nonlocal count
-            body, n = CHROMIUM_WORD.subn("Project Mu", m.group(2))
-            count += n
-            return m.group(1) + body + m.group(3)
-
-        renamed = GRD_MESSAGE.sub(rename, text)
-        if count:
-            path.write_bytes(renamed.encode("utf-8"))
-        total += count
+        total += rewrite_messages(src / rel, lambda b: CHROMIUM_WORD.subn("Project Mu", b))
+    private = 0
+    for rel in PRIVATE_MODE_STRINGS:
+        if not (src / rel).is_file():
+            log(f"private mode strings: {rel} not found, skipped")
+            continue
+        private += rewrite_messages(src / rel, rename_private_mode)
     log(f"product strings: {total} 'Chromium' renamed to 'Project Mu', "
+        f"{private} 'Incognito' renamed to '{PRIVATE_MODE_NAME}', "
         f"{override_strings(src)} message(s) reworded")
 
 

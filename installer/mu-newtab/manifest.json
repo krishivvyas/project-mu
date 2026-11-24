@@ -2,7 +2,7 @@
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA30f+cLZhjULM5fiRSDz+zrdJG6rZRvr1msKkgomkYeCZQFvz8AzdReP9X58BcpIhIRnk96kKpxCeZElNMea5t/UF4VZBNll9dQh1dTQMoW/zdZ8vbM091ECJ9zL0gt0LGZ+hkr4/EJDHtrPXy2BuOt3yIDbBiM4Pp0CrnmbZzuII/BybUdRDBIJQ6Kovl13DswhvBo5xwomURvXcQBaV6UGNrWQjk3OFSY+lkfOGSRNezyYKVuwxZKyIx+EA6ZJUrxXownclHr8xeeQkyUgcu1GidQohd5rX2oCbAmLPTH6ckwqxPso0rOXnnfVrNtXg4DsvcYhGzaZnxBXK3YEtvwIDAQAB",
   "manifest_version": 3,
   "name": "Mu New Tab",
-  "version": "1.0",
+  "version": "1.1",
   "description": "Project Mu's New Tab page: negative space, nothing to load.",
   "chrome_url_overrides": {
     "newtab": "newtab.html"
@@ -14,7 +14,9 @@
     "128": "icons/mu-128.png"
   },
   "permissions": [
-    "tabs"
+    "tabs",
+    "storage",
+    "browsingData"
   ],
   "background": {
     "service_worker": "background.js"

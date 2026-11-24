@@ -1,0 +1,37 @@
+Project Mu: no dead Translate item in the app menu
+
+Translate needs Google's translation servers, and Mu turns translation
+offers off (patch 0003), so the app menu's Translate item is only ever
+greyed out. Add it only while translation offers are on, so it comes
+back when the user turns translation on in Settings.
+
+diff --git a/chrome/browser/ui/toolbar/app_menu_model.cc b/chrome/browser/ui/toolbar/app_menu_model.cc
+index 49ef721d9e..6218eb34ac 100644
+--- a/chrome/browser/ui/toolbar/app_menu_model.cc
++++ b/chrome/browser/ui/toolbar/app_menu_model.cc
+@@ -134,6 +134,7 @@
+ #include "components/password_manager/core/common/password_manager_pref_names.h"
+ #include "components/prefs/pref_member.h"
+ #include "components/prefs/pref_service.h"
++#include "components/translate/core/browser/translate_pref_names.h"
+ #include "components/profile_metrics/browser_profile_type.h"
+ #include "components/saved_tab_groups/public/features.h"
+ #include "components/send_tab_to_self/features.h"
+@@ -2428,8 +2429,15 @@ void AppMenuModel::Build() {
+     }
+   }
+ 
+-  AddItemWithStringIdAndVectorIcon(this, IDC_SHOW_TRANSLATE, IDS_SHOW_TRANSLATE,
+-                                   vector_icons::kGTranslateIcon);
++  // Project Mu: Translate needs Google's translation servers, and Mu turns
++  // translation offers off (patch 0003); without them the item is only ever
++  // greyed out. Show it once the user turns translation back on in Settings.
++  if (browser_->GetProfile()->GetPrefs()->GetBoolean(
++          translate::prefs::kOfferTranslateEnabled)) {
++    AddItemWithStringIdAndVectorIcon(this, IDC_SHOW_TRANSLATE,
++                                     IDS_SHOW_TRANSLATE,
++                                     vector_icons::kGTranslateIcon);
++  }
+ 
+   CreateFindAndEditSubMenu();
+ 

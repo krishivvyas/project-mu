@@ -18,8 +18,19 @@
   <form class="search" action="https://duckduckgo.com/" method="get" role="search" autocomplete="off">
     <input id="q" name="q" type="search" placeholder="Search privately with DuckDuckGo" aria-label="Search" spellcheck="false" autofocus>
   </form>
-  <p class="line">This session returns to nothing when the window closes.</p>
+  <p class="line" id="line" aria-live="polite">This session returns to nothing when the window closes.</p>
 </main>
+
+<!-- Return to Mu: the inkan seal. Held down, it closes every tab and window
+     and clears this session's browsing data, leaving one fresh page. -->
+<button class="seal" id="seal" type="button" aria-describedby="seal-hint"
+        aria-label="Return to Mu. Hold to close every tab and clear this session.">
+  <span class="seal-ink" aria-hidden="true"></span>
+  <span class="seal-glyph" aria-hidden="true">無</span>
+</button>
+<p class="hint" id="seal-hint">Hold the seal to return to Mu: every tab closes, this session is cleared</p>
+
+<div class="impression" aria-hidden="true"><span>無</span></div>
 <script src="newtab.js"></script>
 </body>
 </html>

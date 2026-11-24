@@ -1,0 +1,10 @@
+// Project Mu: the Kage (private window) mark, in place of Incognito's hat
+// and glasses: a ring with its left half in shadow. Tinted by the UI.
+
+CANVAS_DIMENSIONS, 16,
+STROKE, 1.5f,
+CIRCLE, 8, 8, 5.75f,
+NEW_PATH,
+MOVE_TO, 8, 2.25f,
+ARC_TO, 5.75f, 5.75f, 0, 0, 0, 8, 13.75f,
+CLOSE

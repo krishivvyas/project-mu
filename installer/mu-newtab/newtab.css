@@ -5,10 +5,11 @@
   --kiri: #1e2024;   /* misty slate */
   --washi: #e2e8f0;  /* rice paper */
   --mist: #5a606a;
-  --inkan: #dc2626;  /* seal red */
+  --inkan: #dc2626;  /* seal red: only for "return to Mu" */
+  --hold: 1100ms;    /* how long the seal must be held (newtab.js) */
 }
 html, body { height: 100%; margin: 0; background: var(--sumi); color: var(--washi); }
-body { display: grid; place-items: center; font-family: "Segoe UI", system-ui, sans-serif; }
+body { display: grid; place-items: center; font-family: "Segoe UI", system-ui, sans-serif; overflow: hidden; }
 main { display: flex; flex-direction: column; align-items: center; gap: 28px; transform: translateY(-5vh); width: min(560px, 86vw); }
 
 .mark { position: relative; width: 200px; height: 200px; display: grid; place-items: center; user-select: none; }
@@ -29,3 +30,64 @@ main { display: flex; flex-direction: column; align-items: center; gap: 28px; tr
 .search input::-webkit-search-cancel-button { filter: invert(.8); }
 
 .line { margin: 0; font-size: 13px; letter-spacing: .04em; color: var(--mist); user-select: none; }
+
+/* Return to Mu: a small seal in the corner, like the artist's seal on a
+   scroll. Holding it fills it with inkan red from the bottom; letting go
+   before it is full drains it again, so it is never pressed by accident. */
+.seal {
+  position: fixed; right: 28px; bottom: 28px; width: 40px; height: 40px; padding: 0;
+  display: grid; place-items: center; overflow: hidden;
+  background: transparent; color: var(--inkan);
+  border: 1.5px solid var(--inkan); border-radius: 5px;
+  cursor: pointer; opacity: .45; transition: opacity .2s ease;
+  touch-action: none; user-select: none; -webkit-tap-highlight-color: transparent;
+}
+.seal:hover, .seal:focus-visible, .seal.holding { opacity: 1; }
+.seal:focus-visible { outline: 1px solid var(--washi); outline-offset: 4px; }
+.seal-ink {
+  position: absolute; inset: 0; background: var(--inkan);
+  transform: scaleY(0); transform-origin: bottom; transition: transform .3s ease-out;
+}
+.seal-glyph {
+  position: relative; font: 600 22px/1 "Yu Mincho", "MS Mincho", serif;
+  transition: color .3s ease-out;
+}
+.seal.holding .seal-ink { transform: scaleY(1); transition: transform var(--hold) cubic-bezier(.4, 0, .9, .6); }
+.seal.holding .seal-glyph { color: var(--sumi); transition: color var(--hold) steps(2, jump-none); }
+
+.hint {
+  position: fixed; right: 84px; bottom: 39px; margin: 0;
+  font-size: 12px; letter-spacing: .03em; color: var(--mist);
+  opacity: 0; transform: translateX(6px); pointer-events: none;
+  transition: opacity .25s ease, transform .25s ease;
+}
+.seal:hover + .hint, .seal:focus-visible + .hint, .seal.holding + .hint, .hint.nudge { opacity: 1; transform: none; }
+
+/* The stamp: a seal impression pressed onto the page, then the ink dissolves. */
+.impression {
+  position: fixed; left: 50%; top: 50%; width: 168px; height: 168px;
+  display: grid; place-items: center; box-sizing: border-box;
+  border: 6px solid var(--inkan); border-radius: 12px; color: var(--inkan);
+  font: 600 104px/1 "Yu Mincho", "MS Mincho", serif;
+  opacity: 0; pointer-events: none;
+  transform: translate(-50%, -55%) rotate(-4deg) scale(1.5);
+}
+.stamped .impression { animation: stamp 900ms cubic-bezier(.2, .9, .3, 1) forwards; }
+.stamped main, .stamped .seal { animation: dissolve 700ms ease-in forwards; }
+@keyframes stamp {
+  0%   { opacity: 0;   transform: translate(-50%, -55%) rotate(-4deg) scale(1.5); }
+  25%  { opacity: .95; transform: translate(-50%, -55%) rotate(-4deg) scale(1); }
+  70%  { opacity: .9;  transform: translate(-50%, -55%) rotate(-4deg) scale(1); filter: blur(0); }
+  100% { opacity: 0;   transform: translate(-50%, -55%) rotate(-4deg) scale(1.04); filter: blur(10px); }
+}
+@keyframes dissolve { to { opacity: 0; filter: blur(8px); } }
+
+/* The fresh page after returning: the ink settles back in. */
+.returned main { animation: settle 1100ms ease-out both; }
+@keyframes settle { from { opacity: 0; filter: blur(10px); } to { opacity: 1; filter: blur(0); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .stamped .impression { animation: none; opacity: .9; transform: translate(-50%, -55%) rotate(-4deg); }
+  .stamped main, .stamped .seal { animation: none; opacity: 0; }
+  .returned main { animation: none; }
+}

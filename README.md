@@ -53,6 +53,8 @@ upstream Chromium already tests.
 | `0013` rail mark | The active tab in the side rail carries Mu's red inkan mark; Mu's own theme no longer shows an "Installed theme… Undo" bar. The rail's "Tab groups" button starts unpinned (initial preferences). |
 | `0014` no sync promo, no colour | History never shows the "sync your history" promo; the secondary and tertiary palettes go grey too, so the inkan red is the only colour in Mu's UI. |
 | `0015` Incognito links | The Incognito and Guest pages' links are washi and underlined instead of Google blue. |
+| `0016` no dead menu items | The app menu's Translate item only appears once translation is turned back on (Mu turns it off). |
+| `0017` Kage | Mu's private window. Incognito is called **Kage** (影, shadow) throughout the interface; Kage windows are sumi-dark with their own mark (an inkan ensō around 影), and uBlock Origin Lite runs in them too. |
 
 The product name and logos are not patches: `build.py gen` copies the files in
 `branding/src/` (icons, logos, `BRANDING`) over the checkout and renames
@@ -215,6 +217,15 @@ and the portable `Project Mu.cmd` also pass them with `--load-extension`, which
 covers builds made before `0007`. Patch `0008` removes Chromium's "Google API
 keys are missing" bar. The sources are `installer/mu-theme` and
 `installer/mu-newtab`.
+
+**Return to Mu.** A small inkan seal (無) sits in the New Tab page's corner.
+Hold it for about a second and it fills with seal red, stamps the page, and the
+ink dissolves: every tab and window closes, and the session's cookies, site
+data, cache, history (closed tabs included, so Ctrl+Shift+T brings nothing back) and
+download list are cleared. One fresh New Tab page is left, reading "Returned to
+nothing." Saved passwords stay, and Kage windows are not touched. A short press
+only shows the hint, so it never happens by accident; Space or Enter held on
+the seal works too. It is all in the New Tab extension, with no rebuild needed.
 
 The rest of the look is also applied at packaging time, with no Chromium rebuild:
 `build.py package` swaps the icons in `chrome.exe` for the Mu seal
@@ -409,7 +420,7 @@ like ink dissolving, not like "Closing 12 tabs…".
 | ✅ | Sumi (dark, grayscale) theme by default; Washi (light) in the installer |
 | ✅ | Mu icons in `chrome.exe` and the installer |
 | ⬜ | Minimal New Tab page |
-| ⬜ | Inkan "return to Mu" purge micro-interaction |
+| ✅ | Inkan "return to Mu" purge micro-interaction |
 | ✅ | `0010` no blue accents, no profile button; `0011` no registry extensions, no New Tab footer |
 | ✅ | Mu's name, icons and logos inside the browser (`branding/` overlay) |
 | ✅ | Optional uBlock Origin Lite in the installer |

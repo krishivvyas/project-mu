@@ -1,0 +1,149 @@
+Project Mu: Kage, Mu's private window
+
+Incognito is called Kage (影, shadow) in Mu's interface (the strings are
+renamed by build.py gen); this patch gives it Mu's look and protection.
+
+  * uBlock Origin Lite, when installed (patch 0007 loads mu\ublock), is
+    allowed in Kage windows: "Allow in Incognito" is turned on once, the
+    first time it loads, through the same helper as the Extensions page.
+  * Kage windows get Mu's ink instead of Chromium's grey: themes do not
+    apply to private windows, so the system colours behind the frame,
+    toolbar and address bar are set to sumi tones, a step darker than a
+    normal Mu window. Only dark, greyscale, unthemed windows are affected,
+    which in Mu means private windows only.
+  * The Kage New Tab page: sumi background, washi text, Mu's display face
+    for the heading, and the cookie-controls card in kiri with an inkan
+    edge. The splash and tab icons (branding/ overlay) are an inkan ensō
+    around 影 and a ring half in shadow.
+
+diff --git a/chrome/browser/extensions/extension_service.cc b/chrome/browser/extensions/extension_service.cc
+index 43df9e2..fc2a7d1 100644
+--- a/chrome/browser/extensions/extension_service.cc
++++ b/chrome/browser/extensions/extension_service.cc
+@@ -90,6 +90,7 @@
+ #include "extensions/browser/extension_registrar.h"
+ #include "extensions/browser/extension_registry.h"
+ #include "extensions/browser/extension_system.h"
++#include "chrome/browser/extensions/extension_util.h"
+ #include "extensions/browser/extension_util.h"
+ #include "extensions/browser/extensions_browser_client.h"
+ #include "extensions/browser/external_install_info.h"
+@@ -404,6 +405,13 @@ void ExtensionService::Init() {
+           extension_prefs_->UpdateExtensionPref(extension_id, "ack_ntp_bubble",
+                                                 base::Value(true));
+         }
++        // Project Mu: the content blocker protects private (Kage) windows
++        // too. Turn on "Allow in Incognito" once; the helper reloads it so
++        // the permission applies now, and later starts find it already on.
++        if (!extension_id.empty() && std::string_view(name) == "ublock" &&
++            !util::IsIncognitoEnabled(extension_id, profile_)) {
++          util::SetIsIncognitoEnabled(extension_id, profile_, true);
++        }
+       }
+     }
+   }
+diff --git a/chrome/browser/resources/new_tab_page_incognito_guest/incognito_tab.css b/chrome/browser/resources/new_tab_page_incognito_guest/incognito_tab.css
+index 689bd19..c60a6c3 100644
+--- a/chrome/browser/resources/new_tab_page_incognito_guest/incognito_tab.css
++++ b/chrome/browser/resources/new_tab_page_incognito_guest/incognito_tab.css
+@@ -12,23 +12,32 @@ body {
+   display: none !important;
+ }
+ 
++/* Project Mu: Kage, Mu's private window. Sumi ink page, washi text, the
++ * inkan red only in the mark and the card edge. Beats the theme stylesheet's
++ * plain `html` rule; a custom background image (themes) still wins. */
++html:not([hascustombackground='true']) {
++  background-color: rgb(9, 10, 12);
++}
++
+ /** Typography -------------------------------------------------------------- */
+ 
+ .content {
+-  color: rgb(232, 234, 237);  /* --google-grey-200 */
++  color: rgb(226, 232, 240);  /* Project Mu: washi */
+   font-size: calc(100% - 2px);
+   line-height: calc(100% + 6px);
+   min-width: 240px;
+ }
+ 
+ h1 {
+-  font-size: calc(100% + 8px);
++  font-family: Georgia, 'Yu Mincho', serif;  /* Project Mu: Mu's display face */
++  font-size: calc(100% + 10px);
+   font-weight: 400;
++  letter-spacing: 0.02em;
+   line-height: calc(100% + 8px);
+ }
+ 
+ em {
+-  color: white;
++  color: rgb(241, 245, 249);
+   font-style: normal;
+ }
+ 
+@@ -96,8 +105,11 @@ em {
+ 
+ #cookie-controls {
+   align-items: center;
+-  background-color: rgb(40, 40, 40); /* var(--neutral-container) */
+-  border-radius: 4px;
++  /* Project Mu: a kiri card with an inkan edge. */
++  background-color: rgb(20, 22, 26);
++  border: 1px solid rgb(38, 41, 47);
++  border-inline-start: 3px solid rgb(220, 38, 38);
++  border-radius: 6px;
+   box-sizing: border-box;
+   display: flex;
+   padding: 12px 20px;
+@@ -119,7 +131,7 @@ em {
+ }
+ 
+ #cookie-controls-header svg {
+-  fill: rgba(234, 240, 249, 1);
++  fill: rgb(226, 232, 240);
+   height: 20px;
+   margin-right: 8px;
+   vertical-align: top;
+diff --git a/chrome/browser/ui/color/chrome_color_mixers.cc b/chrome/browser/ui/color/chrome_color_mixers.cc
+index 8432f49..a737129 100644
+--- a/chrome/browser/ui/color/chrome_color_mixers.cc
++++ b/chrome/browser/ui/color/chrome_color_mixers.cc
+@@ -23,6 +23,10 @@
+ #include "chrome/browser/ui/color/omnibox_color_mixer.h"
+ #include "chrome/browser/ui/color/product_specifications_color_mixer.h"
+ #include "chrome/browser/ui/color/tab_strip_color_mixer.h"
++#include "ui/color/color_mixer.h"
++#include "ui/color/color_provider.h"
++#include "ui/color/color_provider_key.h"
++#include "ui/color/color_recipe.h"
+ #include "ui/color/color_provider_utils.h"
+ 
+ namespace {
+@@ -73,6 +77,26 @@ void AddChromeColorMixers(ui::ColorProvider* provider,
+       chrome_color_provider_utils_callbacks;
+   ui::SetColorProviderUtilsCallbacks(
+       chrome_color_provider_utils_callbacks.get());
++
++  // Project Mu: Kage, Mu's private window. Themes do not apply there, so it
++  // would get Chromium's grey palette; give it Mu's ink instead: a sumi frame
++  // and a near-black toolbar, a step darker than a normal Mu window. Set at
++  // the system-colour level, before the browser mixers, so everything derived
++  // from them follows. In Mu only private windows are dark, greyscale and
++  // unthemed (normal windows always carry Mu's theme).
++  if (!key.custom_theme && !key.app_controller &&
++      key.color_mode == ui::ColorProviderKey::ColorMode::kDark &&
++      key.user_color_source ==
++          ui::ColorProviderKey::UserColorSource::kGrayscale) {
++    ui::ColorMixer& kage = provider->AddMixer();
++    kage[ui::kColorSysHeader] = {SkColorSetRGB(9, 10, 12)};
++    kage[ui::kColorSysHeaderInactive] = {SkColorSetRGB(9, 10, 12)};
++    kage[ui::kColorSysBase] = {SkColorSetRGB(17, 18, 21)};
++    kage[ui::kColorSysBaseContainer] = {SkColorSetRGB(26, 28, 32)};
++    kage[ui::kColorSysBaseContainerElevated] = {SkColorSetRGB(30, 32, 36)};
++    kage[ui::kColorSysOmniboxContainer] = {SkColorSetRGB(26, 28, 32)};
++  }
++
+   AddChromeColorMixer(provider, key);
+   AddNewTabPageColorMixer(provider, key);
+   AddOmniboxColorMixer(provider, key);

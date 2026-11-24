@@ -31,3 +31,31 @@ function claimOnce() {
 chrome.runtime.onStartup.addListener(claimOnce);
 chrome.runtime.onInstalled.addListener(claimOnce);
 claimOnce();
+
+// Return to Mu: asked for by the inkan seal on Mu's New Tab page (newtab.js).
+// Open one fresh New Tab page, close every other tab and window, then clear
+// the session's browsing data, as if Mu had just started. Clearing history
+// also forgets the closed tabs, so Ctrl+Shift+T brings nothing back. Kage
+// (private) windows are not touched: this extension does not run there.
+chrome.runtime.onMessage.addListener((msg, sender, reply) => {
+  if (msg?.type !== "return-to-mu" || sender.id !== chrome.runtime.id || !sender.tab) return;
+  returnToMu(sender.tab).then(() => reply({ ok: true }),
+                              (err) => reply({ ok: false, error: String(err) }));
+  return true;  // reply is sent asynchronously
+});
+
+async function returnToMu(from) {
+  await chrome.storage.session.set({ returned: Date.now() });  // the fresh page settles in
+  const fresh = await chrome.tabs.create({ windowId: from.windowId, url: "chrome://newtab/",
+                                           active: true });
+  handled.add(fresh.id);
+  const others = (await chrome.tabs.query({})).filter((t) => t.id !== fresh.id).map((t) => t.id);
+  if (others.length) await chrome.tabs.remove(others);
+  // Close the tabs first, so no page can write anything back afterwards.
+  // Passwords stay; site data, cookies, cache, history and downloads go.
+  await chrome.browsingData.remove({ since: 0 }, {
+    cache: true, cacheStorage: true, cookies: true, downloads: true, fileSystems: true,
+    formData: true, history: true, indexedDB: true, localStorage: true,
+    serviceWorkers: true, webSQL: true,
+  });
+}
