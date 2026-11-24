@@ -50,6 +50,7 @@ STATE_NAME = "mu-state.7z"
 # restored as a stream so the archive and the tree never both fill the disk.
 LINUX_STATE_NAME = "mu-state.tar.zst"
 ANDROID_APK = OUT_REL / "apks" / "ChromePublic.apk"
+BRANDING_DIR = REPO_ROOT / "branding" / "src"
 INSTALLER_DIR = REPO_ROOT / "installer"
 INSTALLER_ISS = INSTALLER_DIR / "project-mu.iss"
 # Copied into each new profile on first run: Mu's theme and privacy settings.
@@ -402,8 +403,61 @@ def cmd_doctor(args: argparse.Namespace) -> int:
 # gen
 # --------------------------------------------------------------------------
 
+def apply_branding(src: Path) -> None:
+    """Copy branding/src/** over the checkout (Mu's icons, logos, BRANDING).
+
+    Only files whose bytes differ are written, so an unchanged overlay never
+    bumps mtimes and never triggers rebuilds. Written files get a fresh mtime
+    on purpose: ninja must see them as newer than what was built from them.
+    """
+    changed = 0
+    for path in sorted(BRANDING_DIR.rglob("*")):
+        if not path.is_file():
+            continue
+        dest = src / path.relative_to(BRANDING_DIR)
+        data = path.read_bytes()
+        if dest.is_file() and dest.read_bytes() == data:
+            continue
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_bytes(data)
+        changed += 1
+    log(f"branding: {changed} file(s) updated from {BRANDING_DIR.relative_to(REPO_ROOT)}")
+
+
+PRODUCT_STRINGS = Path("chrome") / "app" / "chromium_strings.grd"
+# "Chromium" as the product name; not ChromiumOS, the Chromium Authors or URLs.
+CHROMIUM_WORD = re.compile(r"\bChromium\b(?!\s?OS\b| Authors\b|\.org)")
+GRD_MESSAGE = re.compile(r"(<message\b[^>]*>)(.*?)(</message>)", re.S)
+
+
+def rebrand_strings(src: Path) -> None:
+    """Call the product "Project Mu" in the interface (window titles, menus,
+    About, dialogs). Rewrites only the text of <message> elements in the
+    English product strings, so attributes and descriptions are untouched; a
+    regex step instead of a patch, so it survives upstream string changes.
+    Other languages fall back to English for the changed strings (the file
+    sets fallback_to_english). Idempotent: an already renamed file is left
+    as is, mtime included."""
+    path = src / PRODUCT_STRINGS
+    text = path.read_bytes().decode("utf-8")  # keep line endings as they are
+    count = 0
+
+    def rename(m: re.Match) -> str:
+        nonlocal count
+        body, n = CHROMIUM_WORD.subn("Project Mu", m.group(2))
+        count += n
+        return m.group(1) + body + m.group(3)
+
+    renamed = GRD_MESSAGE.sub(rename, text)
+    if count:
+        path.write_bytes(renamed.encode("utf-8"))
+    log(f"product strings: {count} 'Chromium' renamed to 'Project Mu'")
+
+
 def cmd_gen(args: argparse.Namespace) -> int:
     src = require_src(args.workdir)
+    apply_branding(src)
+    rebrand_strings(src)
     out = src / OUT_REL
     out.mkdir(parents=True, exist_ok=True)
     wanted = args.args.read_text(encoding="utf-8")
@@ -579,6 +633,11 @@ def cmd_package(args: argparse.Namespace) -> int:
                 if f.is_file():
                     sources[f"{published}/{f.relative_to(base).as_posix()}"] = f
         sources["Project Mu.cmd"] = INSTALLER_DIR / "Project Mu.cmd"
+        # Optional content blocker (the installer asks; the zip always has it).
+        ublock = fetch_ublock(args.workdir, Path(staging))
+        for f in sorted(ublock.rglob("*")):
+            if f.is_file():
+                sources[f"{UBLOCK_DEST}/{f.relative_to(ublock).as_posix()}"] = f
 
         tmp = dest.with_name(dest.name + ".tmp")
         total = 0
@@ -596,6 +655,46 @@ def cmd_package(args: argparse.Namespace) -> int:
         if args.installer_output:
             build_installer(sources, args.version, args.installer_output.resolve())
     return 0
+
+
+# --------------------------------------------------------------------------
+# uBlock Origin Lite (optional, chosen in the installer)
+# --------------------------------------------------------------------------
+
+# Pinned release: bump the version and sha256 together (the digest is the one
+# GitHub lists for the asset). Classic uBlock Origin is Manifest V2, which
+# Chromium no longer runs; uBO Lite is its Manifest V3 edition by the same
+# author. GPLv3: shipped unmodified, with its LICENSE.txt and source link.
+UBLOCK_VERSION = "2026.1122.1948"
+UBLOCK_SHA256 = "7cd72ae78fe6fa007193de633d2dec085a0da50f53283e821918a77978d105fb"
+UBLOCK_URL = ("https://github.com/uBlockOrigin/uBOL-home/releases/download/"
+              f"{UBLOCK_VERSION}/uBOLite_{UBLOCK_VERSION}.chromium.zip")
+UBLOCK_DEST = "mu/ublock"  # patch 0007 loads it from here when present
+
+
+def fetch_ublock(workdir: Path, staging: Path) -> Path:
+    """Download (cached in the workdir), verify and unpack uBO Lite."""
+    cache = workdir / "downloads" / f"uBOLite_{UBLOCK_VERSION}.chromium.zip"
+    if not cache.is_file() or sha256_file(cache) != UBLOCK_SHA256:
+        cache.parent.mkdir(parents=True, exist_ok=True)
+        log(f"downloading uBlock Origin Lite {UBLOCK_VERSION}")
+        part = cache.with_name(cache.name + ".part")
+        with urllib.request.urlopen(UBLOCK_URL, timeout=120) as resp, open(part, "wb") as fh:
+            shutil.copyfileobj(resp, fh)
+        got = sha256_file(part)
+        if got != UBLOCK_SHA256:
+            part.unlink()
+            raise BuildError(f"uBlock Origin Lite download has sha256 {got}, expected {UBLOCK_SHA256}")
+        os.replace(part, cache)
+    dest = staging / "ublock"
+    with zipfile.ZipFile(cache) as z:
+        for name in z.namelist():  # refuse paths that would escape the folder
+            if name.startswith(("/", "\\")) or ".." in Path(name).parts:
+                raise BuildError(f"unexpected path in uBlock Origin Lite zip: {name}")
+        z.extractall(dest)
+    if not (dest / "manifest.json").is_file():
+        raise BuildError("uBlock Origin Lite zip has no manifest.json at its root")
+    return dest
 
 
 # --------------------------------------------------------------------------
@@ -752,8 +851,10 @@ def build_installer(sources: dict[str, Path], version: str, dest: Path) -> None:
             sub = str(Path(rel).parent).replace("/", "\\")
             destdir = "{app}" if sub in ("", ".") else "{app}\\" + sub
             name = Path(rel).name
+            # The wizard's Extensions page decides about optional extensions.
+            check = "; Check: WantUBlock" if rel.startswith(UBLOCK_DEST + "/") else ""
             lines.append(f'Source: "{path.resolve()}"; DestDir: "{destdir}"; '
-                         f'DestName: "{name}"; Flags: ignoreversion')
+                         f'DestName: "{name}"; Flags: ignoreversion{check}')
         files_iss.write_text("\n".join(lines) + "\n", encoding="utf-8-sig")
         cmd = [iscc, "/Qp", f"/DMuVersion={version}", f"/DMuFiles={files_iss}",
                f"/DMuLicense={REPO_ROOT / 'LICENSE'}", f"/O{dest.parent}", f"/F{dest.stem}",

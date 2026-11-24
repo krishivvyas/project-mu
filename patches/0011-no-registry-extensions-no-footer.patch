@@ -1,0 +1,46 @@
+Project Mu: no registry extensions, no New Tab footer
+
+  * No extensions from the Windows registry. Any program on the PC can
+    register an extension there for every Chromium browser (antivirus web
+    advisors, toolbars, adware); upstream then badges the menu with "Action
+    required". Mu ignores that source; enterprise policy still works.
+  * No footer bar under Mu's New Tab page ("Customize Chromium" and the
+    extension attribution).
+
+diff --git a/chrome/browser/extensions/external_provider_impl.cc b/chrome/browser/extensions/external_provider_impl.cc
+index ba8b69a1b0..02a139da0c 100644
+--- a/chrome/browser/extensions/external_provider_impl.cc
++++ b/chrome/browser/extensions/external_provider_impl.cc
+@@ -893,12 +893,10 @@ void ExternalProviderImpl::CreateExternalProviders(
+         bundled_extension_creation_flags));
+ #endif
+ #if BUILDFLAG(IS_WIN)
+-    auto registry_provider = std::make_unique<ExternalProviderImpl>(
+-        service, new ExternalRegistryLoader, profile,
+-        ManifestLocation::kExternalRegistry,
+-        ManifestLocation::kExternalPrefDownload, Extension::NO_FLAGS);
+-    registry_provider->set_allow_updates(true);
+-    provider_list->push_back(std::move(registry_provider));
++    // Project Mu: no extensions from the Windows registry. Any program on the
++    // PC (antivirus, toolbars, adware) can register one there for every
++    // Chromium browser; Mu ignores them. Policy-installed extensions still
++    // work through the policy provider.
+ #else
+     provider_list->push_back(std::make_unique<ExternalProviderImpl>(
+         service,
+diff --git a/chrome/browser/ui/views/new_tab_footer/footer_controller.cc b/chrome/browser/ui/views/new_tab_footer/footer_controller.cc
+index 7b33ea502d..aa4dd50fbc 100644
+--- a/chrome/browser/ui/views/new_tab_footer/footer_controller.cc
++++ b/chrome/browser/ui/views/new_tab_footer/footer_controller.cc
+@@ -218,7 +218,10 @@ bool NewTabFooterController::ContentsViewFooterCotroller::
+     return false;
+   }
+ 
+-  return ntp_footer::IsExtensionNtp(url, owner_->profile_) &&
++  // Project Mu: Mu's New Tab page is an extension, and the footer bar it
++  // would get ("Customize Chromium", extension attribution) is not part of
++  // Mu's page. Never show it.
++  return false && ntp_footer::IsExtensionNtp(url, owner_->profile_) &&
+          owner_->profile_->GetPrefs()->GetBoolean(
+              prefs::kNTPFooterExtensionAttributionEnabled) &&
+          owner_->profile_->GetPrefs()->GetBoolean(prefs::kNtpFooterVisible);

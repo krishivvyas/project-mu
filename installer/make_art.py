@@ -6,7 +6,6 @@ the BMPs: `python installer/make_art.py installer`. CI only uses the BMPs.
 from PIL import Image, ImageDraw, ImageFont
 import math, sys
 from pathlib import Path
-OUT = Path(sys.argv[1])
 SUMI, KIRI, WASHI, INKAN = (9,10,12), (30,32,36), (226,232,240), (220,38,38)
 MINCHO = "C:/Windows/Fonts/yumindb.ttf"
 SERIF = "C:/Windows/Fonts/georgia.ttf"
@@ -68,14 +67,19 @@ def write_ico(path, bg, fg, border=None):
     frames[-1].save(path, format="ICO", sizes=[(s, s) for s in ICON_SIZES], bitmap_format="bmp",
                     append_images=frames[:-1])
 
-write_ico(OUT / "mu.ico", INKAN + (255,), WASHI + (255,))
-write_ico(OUT / "mu-incognito.ico", SUMI + (255,), WASHI + (255,), border=INKAN + (255,))
-(OUT / "mu-newtab" / "icons").mkdir(parents=True, exist_ok=True)
-for s in (16, 32, 48, 128):  # tab icon of the Mu New Tab page
-    icon_frame(s, INKAN + (255,), WASHI + (255,)).save(OUT / "mu-newtab" / "icons" / f"mu-{s}.png")
-print("icons done")
+def main(OUT):
+    write_ico(OUT / "mu.ico", INKAN + (255,), WASHI + (255,))
+    write_ico(OUT / "mu-incognito.ico", SUMI + (255,), WASHI + (255,), border=INKAN + (255,))
+    (OUT / "mu-newtab" / "icons").mkdir(parents=True, exist_ok=True)
+    for s in (16, 32, 48, 128):  # tab icon of the Mu New Tab page
+        icon_frame(s, INKAN + (255,), WASHI + (255,)).save(OUT / "mu-newtab" / "icons" / f"mu-{s}.png")
+    print("icons done")
 
-for pct in (100, 150, 200):
-    wizard(pct/100).save(OUT / f"wizard-image-{pct}.bmp")
-    small(pct/100).save(OUT / f"wizard-small-{pct}.bmp")
-    print(pct, "done")
+    for pct in (100, 150, 200):
+        wizard(pct/100).save(OUT / f"wizard-image-{pct}.bmp")
+        small(pct/100).save(OUT / f"wizard-small-{pct}.bmp")
+        print(pct, "done")
+
+
+if __name__ == "__main__":
+    main(Path(sys.argv[1]))

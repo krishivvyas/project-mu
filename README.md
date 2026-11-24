@@ -45,6 +45,21 @@ upstream Chromium already tests.
 | `0004` session returns to Mu | Cookies and site data are session-only and deleted on exit. Keep a site signed in under *Settings → Privacy → Site settings*. History, the downloads list and the cache are also deleted when the browser closes, or on the next start after a crash. |
 | `0005` hardened defaults | Third-party cookies blocked in every window. Do Not Track sent. WebRTC cannot reveal your local (LAN) IP addresses. *Always use secure connections* (HTTPS-Only) on. No `<a ping>` click-tracking beacons. The address bar no longer sends what you type to the search engine for suggestions. Mu stops running when its last window closes instead of staying in the background, so clear-on-exit really runs. |
 | `0006` own profile (Windows) | Mu keeps its profile in `%LOCALAPPDATA%\Project Mu\User Data` instead of sharing `%LOCALAPPDATA%\Chromium` with any other Chromium on the machine. |
+| `0007` Mu's look on every start | The Sumi theme and Mu's New Tab page (unpacked extensions in `mu\` next to `chrome.exe`) load however Mu is started, plus uBlock Origin Lite when it was chosen in the installer. |
+| `0008`–`0009` quiet start | No "Google API keys are missing" bar and no Chromium welcome screen. |
+| `0010` Mu's interface | No blue accents (every accent maps to Mu's greys), no profile button in normal windows, no toolbar icons for Mu's built-in extensions. |
+| `0011` no registry extensions | Programs on the PC (antivirus "web advisors", toolbars, adware) cannot slip an extension into Mu through the Windows registry; enterprise policy still works. No footer bar under the New Tab page. |
+
+The product name and logos are not patches: `build.py gen` copies the files in
+`branding/src/` (icons, logos, `BRANDING`) over the checkout and renames
+"Chromium" to "Project Mu" in the English interface strings, which keeps working
+when upstream edits those strings.
+
+**uBlock Origin Lite** is offered on the installer's Extensions page (ticked by
+default). Classic uBlock Origin is Manifest V2, which current Chromium no longer
+runs; uBO Lite is its Manifest V3 edition by the same author. Mu ships the
+pinned, checksum-verified release unmodified (GPLv3) and updates it with each
+Mu release.
 
 Kept on purpose: saved passwords, autofill entries and site permissions, because
 you save those deliberately. Clearing on exit only runs while browser sign-in is
@@ -123,9 +138,15 @@ project-mu/
 │   ├── 0004-clear-session-on-exit.patch
 │   ├── 0005-harden-privacy-defaults.patch
 │   ├── 0006-windows-own-profile-folder.patch
+│   ├── 0007 … 0011          # Mu's look, quiet start, interface, no registry extensions
 │   └── patch_order.list     # which .patch files apply, in order
+├── branding/
+│   ├── src/                 # Mu's icons, logos and BRANDING, copied over the checkout by gen
+│   └── make_branding.py     # regenerates branding/src from the Mu art
 ├── installer/
-│   └── project-mu.iss       # Inno Setup script for the Windows installer
+│   ├── project-mu.iss       # Inno Setup wizard for the Windows installer
+│   ├── mu-theme/, mu-newtab/  # the Sumi theme and the New Tab page (unpacked extensions)
+│   └── make_art.py          # wizard images and icons
 ├── scripts/
 │   ├── fetch_upstream.py    # resolve the latest version; download the source tarball
 │   ├── apply_patches.py     # sync src/ to the patch list; diagnose failures
@@ -384,7 +405,10 @@ like ink dissolving, not like "Closing 12 tabs…".
 | ✅ | Mu icons in `chrome.exe` and the installer |
 | ⬜ | Minimal New Tab page |
 | ⬜ | Inkan "return to Mu" purge micro-interaction |
-| ⬜ | Mu branding inside the browser (name, About page logo, `mu.exe`) |
+| ✅ | `0010` no blue accents, no profile button; `0011` no registry extensions, no New Tab footer |
+| ✅ | Mu's name, icons and logos inside the browser (`branding/` overlay) |
+| ✅ | Optional uBlock Origin Lite in the installer |
+| ⬜ | `mu.exe` instead of `chrome.exe` |
 
 ---
 

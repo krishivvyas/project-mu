@@ -2,7 +2,9 @@ Project Mu: load Mu's bundled theme and New Tab page on every start
 
 Mu's look ships next to chrome.exe as two unpacked extensions:
 mu\theme (the Sumi theme: sumi frame, kiri toolbar, washi text) and
-mu\newtab (a New Tab page that is only negative space and 無).
+mu\newtab (a New Tab page that is only negative space and 無). When the
+installer was asked for it, mu\ublock holds uBlock Origin Lite too; it is
+loaded the same way, and skipped when the folder is not there.
 
 Upstream only loads unpacked extensions given with --load-extension, which
 works from Mu's own shortcuts but not when Windows or another app starts
@@ -14,18 +16,19 @@ Mu's New Tab page is also marked as acknowledged, so Chromium does not ask
 "Did you mean to change this page?" about it.
 
 diff --git a/chrome/browser/extensions/extension_service.cc b/chrome/browser/extensions/extension_service.cc
-index bbfff3d..f0c8075 100644
+index bbfff3d18e..43df9e2ea5 100644
 --- a/chrome/browser/extensions/extension_service.cc
 +++ b/chrome/browser/extensions/extension_service.cc
-@@ -14,6 +14,7 @@
+@@ -14,6 +14,8 @@
  #include <utility>
  
  #include "base/auto_reset.h"
 +#include "base/base_paths.h"
++#include "base/files/file_util.h"
  #include "base/check_op.h"
  #include "base/command_line.h"
  #include "base/debug/alias.h"
-@@ -24,6 +25,7 @@
+@@ -24,6 +26,7 @@
  #include "base/metrics/histogram_functions.h"
  #include "base/observer_list.h"
  #include "base/one_shot_event.h"
@@ -33,23 +36,30 @@ index bbfff3d..f0c8075 100644
  #include "base/stl_util.h"
  #include "base/strings/string_number_conversions.h"
  #include "base/strings/string_tokenizer.h"
-@@ -374,6 +376,30 @@ void ExtensionService::Init() {
+@@ -374,6 +377,37 @@ void ExtensionService::Init() {
    if (load_command_line_extensions) {
      LoadExtensionsFromCommandLineFlag(switches::kLoadExtension);
    }
 +#if BUILDFLAG(IS_WIN)
-+  // Project Mu: Mu's look ships next to chrome.exe as two unpacked
-+  // extensions, mu/theme (the Sumi theme) and mu/newtab (the New Tab page).
++  // Project Mu: Mu's look ships next to chrome.exe as unpacked extensions,
++  // mu/theme (the Sumi theme) and mu/newtab (the New Tab page), plus
++  // mu/ublock (uBlock Origin Lite) when the installer was asked for it.
 +  // Load them on every start, the same way --load-extension would, so Mu looks
 +  // like Mu however it is launched.
 +  if (load_command_line_extensions) {
 +    base::FilePath exe_dir;
 +    if (base::PathService::Get(base::DIR_EXE, &exe_dir)) {
-+      for (const char* name : {"theme", "newtab"}) {
++      for (const char* name : {"theme", "newtab", "ublock"}) {
++        const base::FilePath dir = exe_dir.AppendASCII("mu").AppendASCII(name);
++        // Optional ones are simply absent; loading a missing folder would
++        // show a "Failed to load extension" dialog. (A cheap stat; loading
++        // itself reads the folder synchronously on this thread.)
++        if (!base::DirectoryExists(dir)) {
++          continue;
++        }
 +        std::string extension_id;
 +        UnpackedInstaller::Create(profile_)->LoadFromCommandLine(
-+            exe_dir.AppendASCII("mu").AppendASCII(name), &extension_id,
-+            /*only_allow_apps=*/false);
++            dir, &extension_id, /*only_allow_apps=*/false);
 +        // Mu's own New Tab page is not a surprise: skip Chromium's "Did you
 +        // mean to change this page?" prompt for it
 +        // (kNtpOverridingExtensionAcknowledged).
