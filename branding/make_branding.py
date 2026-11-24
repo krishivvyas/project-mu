@@ -38,20 +38,36 @@ def logo_name(scale: int, text_color) -> Image.Image:
 
 
 # Chromium's internal-page tab icons drawn in Google blue; Mu draws them in
-# washi grey (same shapes: only the colour changes, alpha is kept).
-BLUE_FAVICONS = ["bookmarks", "downloads", "management", "plugins", "settings"]
+# washi grey (same shapes: only the colour changes, alpha is kept). Paths are
+# relative to the Chromium src folder (and to branding/src).
+BLUE_FAVICONS = (
+    [f"chrome/app/theme/{d}/common/favicon_{n}.png"
+     for d in ("default_100_percent", "default_200_percent")
+     for n in ("bookmarks", "downloads", "management", "plugins", "settings")]
+    + [f"components/resources/{d}/{n}"
+       for d in ("default_100_percent", "default_200_percent", "default_300_percent")
+       for n in ("favicon_history.png", "flags_ui/favicon_flags.png")]
+    + [f"extensions/browser/resources/{d}/favicon_extensions.png"
+       for d in ("default_100_percent", "default_200_percent")]
+)
+# Chromium's logo as a tab icon (e.g. chrome://version): Mu's seal instead.
+PRODUCT_FAVICONS = {
+    "components/resources/default_100_percent/chromium/favicon_product.png": 16,
+    "components/resources/default_200_percent/chromium/favicon_product.png": 32,
+}
 
 
 def recolor_favicons(chromium_src: Path) -> None:
-    for folder in ("default_100_percent", "default_200_percent"):
-        out = THEME / folder / "common"
-        out.mkdir(parents=True, exist_ok=True)
-        for name in BLUE_FAVICONS:
-            src = chromium_src / "chrome" / "app" / "theme" / folder / "common" / f"favicon_{name}.png"
-            alpha = Image.open(src).convert("RGBA").getchannel("A")
-            im = Image.new("RGBA", alpha.size, make_art.WASHI + (255,))
-            im.putalpha(alpha)
-            im.save(out / f"favicon_{name}.png")
+    out_root = HERE / "src"
+    for rel in BLUE_FAVICONS:
+        alpha = Image.open(chromium_src / rel).convert("RGBA").getchannel("A")
+        im = Image.new("RGBA", alpha.size, make_art.WASHI + (255,))
+        im.putalpha(alpha)
+        (out_root / rel).parent.mkdir(parents=True, exist_ok=True)
+        im.save(out_root / rel)
+    for rel, size in PRODUCT_FAVICONS.items():
+        (out_root / rel).parent.mkdir(parents=True, exist_ok=True)
+        logo(size).save(out_root / rel)
 
 
 def main() -> None:

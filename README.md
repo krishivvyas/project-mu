@@ -51,6 +51,7 @@ upstream Chromium already tests.
 | `0011` no registry extensions | Programs on the PC (antivirus "web advisors", toolbars, adware) cannot slip an extension into Mu through the Windows registry; enterprise policy still works. No footer bar under the New Tab page. |
 | `0012` quiet address bar | The focused address bar gets a soft grey ring instead of a heavy white outline; other controls keep the high-contrast keyboard focus ring. |
 | `0013` rail mark | The active tab in the side rail carries Mu's red inkan mark; Mu's own theme no longer shows an "Installed theme… Undo" bar. The rail's "Tab groups" button starts unpinned (initial preferences). |
+| `0014` no sync promo, no colour | History never shows the "sync your history" promo; the secondary and tertiary palettes go grey too, so the inkan red is the only colour in Mu's UI. |
 
 The product name and logos are not patches: `build.py gen` copies the files in
 `branding/src/` (icons, logos, `BRANDING`) over the checkout and renames

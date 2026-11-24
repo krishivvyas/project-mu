@@ -1,0 +1,70 @@
+Project Mu: no sync promo on History, no coloured accents at all
+
+  * History never shows "See your history on other devices / Sync history".
+    Mu has no sign-in or sync, and keeps no history by default (0002).
+  * Patch 0010 turned the primary palette grey; the secondary and tertiary
+    palettes still tinted tonal button outlines (Details / Remove on the
+    Extensions page), chips and tonal containers blue-green. Map them to the
+    neutral tone of the same lightness too, so Mu's UI is ink, grey and washi
+    with the inkan red as its only colour.
+
+diff --git a/chrome/browser/ui/webui/history/browsing_history_handler.cc b/chrome/browser/ui/webui/history/browsing_history_handler.cc
+index 2ca7d2b..fce7a81 100644
+--- a/chrome/browser/ui/webui/history/browsing_history_handler.cc
++++ b/chrome/browser/ui/webui/history/browsing_history_handler.cc
+@@ -756,7 +756,10 @@ void BrowsingHistoryHandler::ShouldShowHistoryPageHistorySyncPromo(
+     return;
+   }
+ 
+-  std::move(callback).Run(true);
++  // Project Mu: never show the "See your history on other devices / Sync
++  // history" promo. Mu has no sign-in or sync, and keeps no history by
++  // default (patch 0002).
++  std::move(callback).Run(false);
+ }
+ 
+ void BrowsingHistoryHandler::RecordHistoryPageHistorySyncPromoDismissed() {
+diff --git a/ui/color/ref_color_mixer.cc b/ui/color/ref_color_mixer.cc
+index dad5a9e..26f1718 100644
+--- a/ui/color/ref_color_mixer.cc
++++ b/ui/color/ref_color_mixer.cc
+@@ -340,6 +340,39 @@ void AddRefColorMixer(ColorProvider* provider, const ColorProviderKey& key) {
+   mu[kColorRefPrimary95] = {kColorRefNeutral95};
+   mu[kColorRefPrimary99] = {kColorRefNeutral99};
+   mu[kColorRefPrimary100] = {kColorRefNeutral100};
++  // Project Mu: the secondary and tertiary palettes too (tonal button
++  // outlines, chips, tonal containers); same rule, same lightness. Neutral
++  // has no tone 35, so Secondary35 uses the nearest, 30.
++  mu[kColorRefSecondary0] = {kColorRefNeutral0};
++  mu[kColorRefSecondary10] = {kColorRefNeutral10};
++  mu[kColorRefSecondary12] = {kColorRefNeutral12};
++  mu[kColorRefSecondary15] = {kColorRefNeutral15};
++  mu[kColorRefSecondary20] = {kColorRefNeutral20};
++  mu[kColorRefSecondary25] = {kColorRefNeutral25};
++  mu[kColorRefSecondary30] = {kColorRefNeutral30};
++  mu[kColorRefSecondary35] = {kColorRefNeutral30};
++  mu[kColorRefSecondary40] = {kColorRefNeutral40};
++  mu[kColorRefSecondary50] = {kColorRefNeutral50};
++  mu[kColorRefSecondary60] = {kColorRefNeutral60};
++  mu[kColorRefSecondary70] = {kColorRefNeutral70};
++  mu[kColorRefSecondary80] = {kColorRefNeutral80};
++  mu[kColorRefSecondary90] = {kColorRefNeutral90};
++  mu[kColorRefSecondary95] = {kColorRefNeutral95};
++  mu[kColorRefSecondary99] = {kColorRefNeutral99};
++  mu[kColorRefSecondary100] = {kColorRefNeutral100};
++  mu[kColorRefTertiary0] = {kColorRefNeutral0};
++  mu[kColorRefTertiary10] = {kColorRefNeutral10};
++  mu[kColorRefTertiary20] = {kColorRefNeutral20};
++  mu[kColorRefTertiary30] = {kColorRefNeutral30};
++  mu[kColorRefTertiary40] = {kColorRefNeutral40};
++  mu[kColorRefTertiary50] = {kColorRefNeutral50};
++  mu[kColorRefTertiary60] = {kColorRefNeutral60};
++  mu[kColorRefTertiary70] = {kColorRefNeutral70};
++  mu[kColorRefTertiary80] = {kColorRefNeutral80};
++  mu[kColorRefTertiary90] = {kColorRefNeutral90};
++  mu[kColorRefTertiary95] = {kColorRefNeutral95};
++  mu[kColorRefTertiary99] = {kColorRefNeutral99};
++  mu[kColorRefTertiary100] = {kColorRefNeutral100};
+ }
+ 
+ }  // namespace ui
