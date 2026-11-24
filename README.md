@@ -56,6 +56,7 @@ upstream Chromium already tests.
 | `0016` no dead menu items | The app menu's Translate item only appears once translation is turned back on (Mu turns it off). |
 | `0017` Kage | Mu's private window. Incognito is called **Kage** (影, shadow) throughout the interface; Kage windows are sumi-dark with their own mark (an inkan ensō around 影), and uBlock Origin Lite runs in them too. |
 | `0018` mu.exe | The browser ships as `mu.exe`. Chromium finds and checks its own executable by name (the renderer code-signing mitigation, Task Manager's sampling, notifications, web-app shortcuts, start at login), so those use Mu's name. |
+| `0019` quiet toolbar | Forward appears only after going back, the menu button is an ensō instead of three dots, there is no divider before it, and the address rests in the middle of the bar (it moves left while you edit). |
 
 The product name and logos are not patches: `build.py gen` copies the files in
 `branding/src/` (icons, logos, `BRANDING`) over the checkout and renames
@@ -416,7 +417,7 @@ like ink dissolving, not like "Closing 12 tabs…".
 | ✅ | `0006` separate Windows profile folder |
 | ✅ | `0007` Sumi theme and Mu New Tab page on every start; `0008` no API-key bar; `0009` no Chromium welcome screen |
 | ✅ | Side-rail (vertical) tabs by default; New Tab search box |
-| ⬜ | Mu's own toolbar and tab UI (replacing Chromium's views) |
+| ✅ | `0019` quiet toolbar (Mu's own take on Chromium's toolbar) |
 | ⬜ | Windows setup wizard (Inno Setup) in a CI release |
 | ⬜ | First Android arm64 release |
 | ✅ | Sumi (dark, grayscale) theme by default; Washi (light) in the installer |

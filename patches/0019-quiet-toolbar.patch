@@ -1,0 +1,141 @@
+Project Mu: the quiet toolbar
+
+Mu keeps Chromium's toolbar but takes the noise out of it:
+
+  * Forward is hidden while it could do nothing (most of the time) and
+    appears after going back. The "Show forward button" setting still hides
+    it for good.
+  * No divider between the extensions button and the menu.
+  * The app menu button is an ensō (new mu_menu.icon) instead of three dots.
+    Only this button changes: the three-dot icon is shared by many other
+    menus.
+  * The address rests in the middle of the address bar, and moves to the
+    left edge while it is being edited.
+
+diff --git a/chrome/app/vector_icons/BUILD.gn b/chrome/app/vector_icons/BUILD.gn
+index d08b8c0..ef15724 100644
+--- a/chrome/app/vector_icons/BUILD.gn
++++ b/chrome/app/vector_icons/BUILD.gn
+@@ -62,6 +62,7 @@ aggregate_vector_icons("chrome_vector_icons") {
+     "bottom_panel_close_old.icon",
+     "browser_logo_old.icon",
+     "browser_tools_chrome_refresh_old.icon",
++    "mu_menu.icon",
+     "browser_tools_error_old.icon",
+     "browser_tools_old.icon",
+     "browser_tools_touch_old.icon",
+diff --git a/chrome/app/vector_icons/mu_menu.icon b/chrome/app/vector_icons/mu_menu.icon
+new file mode 100644
+index 0000000..4f7615d
+--- /dev/null
++++ b/chrome/app/vector_icons/mu_menu.icon
+@@ -0,0 +1,14 @@
++// Copyright 2026 The Project Mu Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++// Project Mu's app menu button: an enso, a brush circle left open at the top
++// right, around a dot (so it does not read as a loading spinner), in place of
++// Chromium's three dots.
++
++CANVAS_DIMENSIONS, 20,
++STROKE, 1.75f,
++MOVE_TO, 14.98f, 5.82f,
++ARC_TO, 6.5f, 6.5f, 0, 1, 1, 12.22f, 3.89f,
++NEW_PATH,
++CIRCLE, 10, 10, 1.75f
+diff --git a/chrome/browser/ui/views/omnibox/omnibox_view_views.cc b/chrome/browser/ui/views/omnibox/omnibox_view_views.cc
+index 6d919ce..890806c 100644
+--- a/chrome/browser/ui/views/omnibox/omnibox_view_views.cc
++++ b/chrome/browser/ui/views/omnibox/omnibox_view_views.cc
+@@ -245,6 +245,9 @@ void OmniboxViewViews::Init() {
+   SetTextInputType(GetPreferredTextInputType());
+   GetRenderText()->SetElideBehavior(gfx::ELIDE_TAIL);
+   GetRenderText()->set_symmetric_selection_visual_bounds(true);
++  // Project Mu: the address rests in the middle of the bar; it moves to the
++  // left edge while you edit it (StopEliding / ElideAndResetScrollPosition).
++  SetHorizontalAlignment(gfx::ALIGN_CENTER);
+   InstallPlaceholderText();
+   scoped_template_url_service_observation_.Observe(
+       controller()->client()->GetTemplateURLService());
+@@ -1993,6 +1996,7 @@ void OmniboxViewViews::OnBlur() {
+ 
+ void OmniboxViewViews::StopEliding() {
+   GetRenderText()->SetElideBehavior(gfx::NO_ELIDE);
++  SetHorizontalAlignment(gfx::ALIGN_LEFT);  // Project Mu: editing
+ 
+ #if BUILDFLAG(SUPPORTS_AX_TEXT_OFFSETS)
+   // The text offsets are no longer valid when the elide behavior changes, even
+@@ -2024,6 +2028,8 @@ void OmniboxViewViews::ElideAndResetScrollPosition() {
+   // text, since the start of the text may not be at the left edge).
+   gfx::RenderText* render_text = GetRenderText();
+   render_text->SetElideBehavior(gfx::ELIDE_TAIL);
++  // Project Mu: back to the middle of the bar once editing is over.
++  SetHorizontalAlignment(HasFocus() ? gfx::ALIGN_LEFT : gfx::ALIGN_CENTER);
+ 
+ #if BUILDFLAG(SUPPORTS_AX_TEXT_OFFSETS)
+   // The text offsets are no longer valid when the elide behavior changes.
+diff --git a/chrome/browser/ui/views/toolbar/browser_app_menu_button.cc b/chrome/browser/ui/views/toolbar/browser_app_menu_button.cc
+index e0a1557..8a0f7dd 100644
+--- a/chrome/browser/ui/views/toolbar/browser_app_menu_button.cc
++++ b/chrome/browser/ui/views/toolbar/browser_app_menu_button.cc
+@@ -35,6 +35,7 @@
+ #include "ui/gfx/color_utils.h"
+ #include "ui/gfx/image/canvas_image_source.h"
+ #include "ui/gfx/paint_vector_icon.h"
++#include "chrome/app/vector_icons/vector_icons.h"
+ #include "ui/views/animation/animation_delegate_views.h"
+ #include "ui/views/animation/ink_drop.h"
+ #include "ui/views/animation/ink_drop_highlight.h"
+@@ -151,12 +152,8 @@ void BrowserAppMenuButton::UpdateThemeBasedState() {
+ }
+ 
+ void BrowserAppMenuButton::UpdateIcon() {
+-  const gfx::VectorIcon& icon =
+-      ui::TouchUiController::Get()->touch_ui()
+-          ? features::IsRoundedIconsEnabled() ? kMoreVertIcon
+-                                              : kBrowserToolsTouchOldIcon
+-      : features::IsRoundedIconsEnabled() ? kMoreVertIcon
+-                                          : kBrowserToolsChromeRefreshOldIcon;
++  // Project Mu: the menu is an enso, not three dots (mu_menu.icon).
++  const gfx::VectorIcon& icon = kMuMenuIcon;
+   const int icon_size = GetIconSize();
+ 
+   for (auto state : kButtonStates) {
+diff --git a/chrome/browser/ui/views/toolbar/toolbar_view.cc b/chrome/browser/ui/views/toolbar/toolbar_view.cc
+index 7f404c6..69968fe 100644
+--- a/chrome/browser/ui/views/toolbar/toolbar_view.cc
++++ b/chrome/browser/ui/views/toolbar/toolbar_view.cc
+@@ -418,7 +418,8 @@ void ToolbarView::Init() {
+       !features::IsWebUIExtensionsContainerEnabled()) {
+     extensions_container = std::make_unique<ExtensionsToolbarDesktop>(browser_);
+ 
+-    toolbar_divider = std::make_unique<ToolbarDivider>();
++    // Project Mu: no divider between the extensions button and the menu;
++    // the quiet toolbar is separated by space alone.
+   }
+ 
+   std::unique_ptr<MediaToolbarButtonView> media_button;
+@@ -1373,6 +1374,11 @@ ToolbarView::GetContentSettingBubbleModelDelegate() {
+ void ToolbarView::EnabledStateChangedForCommand(int id, bool enabled) {
+   CHECK(display_mode_ == DisplayMode::kNormal, base::NotFatalUntil::M162);
+ 
++  // Project Mu: Forward appears only while there is a page to go forward to.
++  if (id == IDC_FORWARD) {
++    SetForwardButtonVisibility(show_forward_button_.GetValue() && enabled);
++  }
++
+   if ((id == IDC_BACK || id == IDC_FORWARD) &&
+       features::IsWebUIBackForwardButtonEnabled()) {
+     toolbar_webview_->SetBackForwardEnabled(id, enabled);
+@@ -2166,6 +2172,10 @@ void ToolbarView::OnTouchUiChanged() {
+ }
+ 
+ void ToolbarView::SetForwardButtonVisibility(bool visible) {
++  // Project Mu: a quiet toolbar. Forward is hidden while it could do nothing
++  // (most of the time) and appears after going back, as long as the
++  // "Show forward button" setting is on.
++  visible = visible && chrome::IsCommandEnabled(browser_, IDC_FORWARD);
+   if (features::IsWebUIBackForwardButtonEnabled()) {
+     toolbar_webview_->SetForwardVisible(visible);
+   } else {
