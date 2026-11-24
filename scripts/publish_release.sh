@@ -26,7 +26,7 @@ Project Mu built from Chromium **$VERSION** with the patch set at $GITHUB_SHA.
 | Platform | File |
 |---|---|
 | Windows 10/11 x64, installer | \`project-mu-windows-x64-setup.exe\` |
-| Windows 10/11 x64, portable | \`project-mu-windows-x64-portable.zip\` (unzip and run \`chrome.exe\`) |
+| Windows 10/11 x64, portable | \`project-mu-windows-x64-portable.zip\` (unzip and run \`mu.exe\`) |
 | Android arm64 | \`project-mu-android-arm64.apk\` |
 
 A platform missing from this release did not finish building in this run.

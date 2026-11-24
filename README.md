@@ -45,7 +45,7 @@ upstream Chromium already tests.
 | `0004` session returns to Mu | Cookies and site data are session-only and deleted on exit. Keep a site signed in under *Settings → Privacy → Site settings*. History, the downloads list and the cache are also deleted when the browser closes, or on the next start after a crash. |
 | `0005` hardened defaults | Third-party cookies blocked in every window. Do Not Track sent. WebRTC cannot reveal your local (LAN) IP addresses. *Always use secure connections* (HTTPS-Only) on. No `<a ping>` click-tracking beacons. The address bar no longer sends what you type to the search engine for suggestions. Mu stops running when its last window closes instead of staying in the background, so clear-on-exit really runs. |
 | `0006` own profile (Windows) | Mu keeps its profile in `%LOCALAPPDATA%\Project Mu\User Data` instead of sharing `%LOCALAPPDATA%\Chromium` with any other Chromium on the machine. |
-| `0007` Mu's look on every start | The Sumi theme and Mu's New Tab page (unpacked extensions in `mu\` next to `chrome.exe`) load however Mu is started, plus uBlock Origin Lite when it was chosen in the installer. |
+| `0007` Mu's look on every start | The Sumi theme and Mu's New Tab page (unpacked extensions in `mu\` next to `mu.exe`) load however Mu is started, plus uBlock Origin Lite when it was chosen in the installer. |
 | `0008`–`0009` quiet start | No "Google API keys are missing" bar and no Chromium welcome screen. |
 | `0010` Mu's interface | No blue accents (every accent maps to Mu's greys), no profile button in normal windows, no toolbar icons for Mu's built-in extensions. |
 | `0011` no registry extensions | Programs on the PC (antivirus "web advisors", toolbars, adware) cannot slip an extension into Mu through the Windows registry; enterprise policy still works. No footer bar under the New Tab page. |
@@ -55,6 +55,7 @@ upstream Chromium already tests.
 | `0015` Incognito links | The Incognito and Guest pages' links are washi and underlined instead of Google blue. |
 | `0016` no dead menu items | The app menu's Translate item only appears once translation is turned back on (Mu turns it off). |
 | `0017` Kage | Mu's private window. Incognito is called **Kage** (影, shadow) throughout the interface; Kage windows are sumi-dark with their own mark (an inkan ensō around 影), and uBlock Origin Lite runs in them too. |
+| `0018` mu.exe | The browser ships as `mu.exe`. Chromium finds and checks its own executable by name (the renderer code-signing mitigation, Task Manager's sampling, notifications, web-app shortcuts, start at login), so those use Mu's name. |
 
 The product name and logos are not patches: `build.py gen` copies the files in
 `branding/src/` (icons, logos, `BRANDING`) over the checkout and renames
@@ -179,7 +180,7 @@ always points at the newest build. Releases up to `r6` used the single name
 | File | Platform |
 |---|---|
 | `project-mu-windows-x64-setup.exe` | Windows 10/11 x64. Setup wizard; installs for the current user, no admin needed |
-| `project-mu-windows-x64-portable.zip` | Windows 10/11 x64. Unzip and run `project-mu-<version>\chrome.exe` |
+| `project-mu-windows-x64-portable.zip` | Windows 10/11 x64. Unzip and run `project-mu-<version>\mu.exe` |
 | `project-mu-android-arm64.apk` | Android, 64-bit ARM phones. Only present once Android signing is set up |
 
 Check a download in PowerShell (the two hashes must match):
@@ -198,7 +199,7 @@ The installer is a step-by-step setup wizard: **Welcome → License → Setup ty
 choose the folder, the privacy settings (delete cookies on close, block
 third-party cookies, HTTPS-Only, Do Not Track, save history, search
 suggestions) and the shortcuts. The privacy choices are written to
-`initial_preferences` next to `chrome.exe` and apply when a new profile is
+`initial_preferences` next to `mu.exe` and apply when a new profile is
 created. By default it installs for the current user to
 `%LOCALAPPDATA%\Programs\Project Mu`, with Start-menu and desktop shortcuts
 named **Project Mu**, and registers Mu as a browser. The Finish page can launch
@@ -207,7 +208,7 @@ as Project Mu, and uninstalling offers to delete the profile too. The browser's
 own window title and About page still say "Chromium" until Mu has its own
 branding.
 
-Mu's look ships next to `chrome.exe` in `mu\`: `mu\theme` is the **Sumi**
+Mu's look ships next to `mu.exe` in `mu\`: `mu\theme` is the **Sumi**
 theme (sumi `#090A0C` frame and tabs, washi `#E2E8F0` text) and `mu\newtab` is
 the New Tab page: negative space, an ensō and 無, and a DuckDuckGo search box
 that sends nothing until you press Enter. Tabs live in a slim **side rail**
@@ -228,7 +229,8 @@ only shows the hint, so it never happens by accident; Space or Enter held on
 the seal works too. It is all in the New Tab extension, with no rebuild needed.
 
 The rest of the look is also applied at packaging time, with no Chromium rebuild:
-`build.py package` swaps the icons in `chrome.exe` for the Mu seal
+`build.py package` renames `chrome.exe` to `mu.exe` (patch `0018` teaches
+Chromium the new name), swaps its icons for the Mu seal
 (`installer/mu.ico`, and `mu-incognito.ico` for Incognito), and ships an
 `initial_preferences` file that gives every new profile the Sumi theme
 (Chromium's dark, grayscale colour scheme) and Mu's privacy settings. The
@@ -418,13 +420,13 @@ like ink dissolving, not like "Closing 12 tabs…".
 | ⬜ | Windows setup wizard (Inno Setup) in a CI release |
 | ⬜ | First Android arm64 release |
 | ✅ | Sumi (dark, grayscale) theme by default; Washi (light) in the installer |
-| ✅ | Mu icons in `chrome.exe` and the installer |
+| ✅ | Mu icons in the browser and the installer |
 | ⬜ | Minimal New Tab page |
 | ✅ | Inkan "return to Mu" purge micro-interaction |
 | ✅ | `0010` no blue accents, no profile button; `0011` no registry extensions, no New Tab footer |
 | ✅ | Mu's name, icons and logos inside the browser (`branding/` overlay) |
 | ✅ | Optional uBlock Origin Lite in the installer |
-| ⬜ | `mu.exe` instead of `chrome.exe` |
+| ✅ | `0018` `mu.exe` instead of `chrome.exe` |
 
 ---
 

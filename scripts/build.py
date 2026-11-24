@@ -60,6 +60,8 @@ INITIAL_PREFS = INSTALLER_DIR / "initial_preferences"
 # Override with MU_WINSDK_URL when Chromium starts requiring a newer SDK.
 WINSDK_URL = "https://go.microsoft.com/fwlink/?linkid=2382519"
 
+# What chrome.exe is called in the zip and the installer (patch 0018).
+BROWSER_EXE = "mu.exe"
 # Must exist in a usable package; everything else in the archive list is optional.
 REQUIRED_FILES = ["chrome.exe", "chrome.dll", "chrome_elf.dll", "resources.pak",
                   "icudtl.dat", "v8_context_snapshot.bin"]
@@ -736,6 +738,9 @@ def cmd_package(args: argparse.Namespace) -> int:
         sources = {rel: out / rel for rel in chosen}
         for binary, groups in BRANDED_ICONS.items():
             sources[binary] = brand_icons(out / binary, Path(staging), groups)
+        # The browser ships as mu.exe; patch 0018 teaches Chromium the name.
+        # (The build itself keeps chrome.exe, which Chromium's build expects.)
+        sources[BROWSER_EXE] = sources.pop("chrome.exe")
         sources["initial_preferences"] = INITIAL_PREFS
         sources["LICENSE-project-mu.txt"] = REPO_ROOT / "LICENSE"
         # Mu's look: the Sumi theme and the New Tab page (patch 0007 loads them).

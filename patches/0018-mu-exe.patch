@@ -1,0 +1,79 @@
+Project Mu: the browser is mu.exe
+
+Mu ships its browser as mu.exe; build.py package renames chrome.exe when it
+packs the build (the build itself still produces chrome.exe, which Chromium's
+build files and archive lists expect). This patch teaches the code that finds
+or checks the browser by file name to use Mu's name:
+
+  * chrome::kBrowserProcessExecutableName/Path (Windows). Among others: the
+    check that turns on the "Microsoft-signed DLLs only" mitigation for
+    renderers only when the browser runs from its own executable, Task
+    Manager's CPU and memory sampling, and the notification helper that wakes
+    the browser from a Windows notification.
+  * installer::kChromeExe: start at login, protocol launches and the
+    uninstall shortcut cleanup.
+  * chrome_proxy.exe, which installed web apps' shortcuts start the browser
+    through.
+
+diff --git a/chrome/chrome_proxy/chrome_proxy_main_win.cc b/chrome/chrome_proxy/chrome_proxy_main_win.cc
+index 776f544..d86a531 100644
+--- a/chrome/chrome_proxy/chrome_proxy_main_win.cc
++++ b/chrome/chrome_proxy/chrome_proxy_main_win.cc
+@@ -14,8 +14,10 @@
+ 
+ namespace {
+ 
++// Project Mu: the browser ships as mu.exe (build.py package renames
++// chrome.exe), so code that finds or checks the browser by name uses Mu's.
+ constexpr base::FilePath::CharType kChromeExecutable[] =
+-    FILE_PATH_LITERAL("chrome.exe");
++    FILE_PATH_LITERAL("mu.exe");
+ 
+ constexpr base::FilePath::CharType kChromeProxyExecutable[] =
+     FILE_PATH_LITERAL("chrome_proxy.exe");
+diff --git a/chrome/common/chrome_constants.cc b/chrome/common/chrome_constants.cc
+index 1a6b899..cf7aafc 100644
+--- a/chrome/common/chrome_constants.cc
++++ b/chrome/common/chrome_constants.cc
+@@ -31,10 +31,12 @@ const char kChromeVersion[] = CHROME_VERSION_STRING;
+ // do so.
+ 
+ #if BUILDFLAG(IS_WIN)
++// Project Mu: the browser ships as mu.exe (build.py package renames
++// chrome.exe), so code that finds or checks the browser by name uses Mu's.
+ const base::FilePath::CharType kBrowserProcessExecutableName[] =
+-    FPL("chrome.exe");
++    FPL("mu.exe");
+ const base::FilePath::CharType kHelperProcessExecutableName[] =
+-    FPL("chrome.exe");
++    FPL("mu.exe");
+ #elif BUILDFLAG(IS_MAC)
+ const base::FilePath::CharType kBrowserProcessExecutableName[] =
+     FPL(PRODUCT_FULLNAME_STRING);
+@@ -54,9 +56,9 @@ const base::FilePath::CharType kHelperProcessExecutableName[] = FPL("exe");
+ 
+ #if BUILDFLAG(IS_WIN)
+ const base::FilePath::CharType kBrowserProcessExecutablePath[] =
+-    FPL("chrome.exe");
++    FPL("mu.exe");
+ const base::FilePath::CharType kHelperProcessExecutablePath[] =
+-    FPL("chrome.exe");
++    FPL("mu.exe");
+ #elif BUILDFLAG(IS_MAC)
+ const base::FilePath::CharType kBrowserProcessExecutablePath[] =
+     FPL(PRODUCT_FULLNAME_STRING ".app/Contents/MacOS/" PRODUCT_FULLNAME_STRING);
+diff --git a/chrome/installer/util/util_constants.h b/chrome/installer/util/util_constants.h
+index 825aba2..2a3060c 100644
+--- a/chrome/installer/util/util_constants.h
++++ b/chrome/installer/util/util_constants.h
+@@ -393,7 +393,9 @@ inline constexpr char kGoogleUpdateIsMachineEnvVar[] = "GoogleUpdateIsMachine";
+ // Active Setup.
+ inline constexpr wchar_t kActiveSetupExe[] = L"chrmstp.exe";
+ inline constexpr wchar_t kChromeDll[] = L"chrome.dll";
+-inline constexpr wchar_t kChromeExe[] = L"chrome.exe";
++// Project Mu: the browser ships as mu.exe (build.py package renames
++// chrome.exe), so code that finds or checks the browser by name uses Mu's.
++inline constexpr wchar_t kChromeExe[] = L"mu.exe";
+ inline constexpr wchar_t kChromeNewExe[] = L"new_chrome.exe";
+ inline constexpr wchar_t kChromeOldExe[] = L"old_chrome.exe";
+ inline constexpr wchar_t kChromeProxyExe[] = L"chrome_proxy.exe";
