@@ -432,12 +432,21 @@ PRODUCT_STRINGS = [
     Path("chrome") / "app" / "chromium_strings.grd",
     Path("chrome") / "app" / "settings_chromium_strings.grdp",
     Path("components") / "components_chromium_strings.grd",
+    # Shared strings that name the browser in their Chromium-branded variant:
+    # Incognito page, site info, security warnings, autofill, passwords.
+    *(Path("components") / f"{name}_strings.grdp" for name in (
+        "new_or_sad_tab", "page_info", "security_interstitials", "ssl_errors",
+        "autofill", "autofill_payments", "password_manager", "management",
+        "search_engine_choice", "reset_password", "send_tab_to_self")),
+    Path("components") / "privacy_sandbox_strings.grd",
+    Path("chrome") / "app" / "password_manager_ui_strings.grdp",
+    Path("chrome") / "app" / "settings_strings.grdp",
 ]
 # "Chromium" as the product name; not ChromiumOS, the Chromium Authors, URLs,
 # or the credit to the upstream project (the linked word in "made possible by
 # the Chromium open source project", About page and chrome://version).
 CHROMIUM_WORD = re.compile(
-    r'\bChromium\b(?!\s?OS\b| Authors\b|\.org|<ph name="END_LINK_CHROMIUM"| open source project)')
+    r'\bChromium\b(?!\s?OS\b| Authors\b| Projects\b|\.org|<ph name="END_LINK_CHROMIUM"| open source project)')
 GRD_MESSAGE = re.compile(r"(<message\b[^>]*>)(.*?)(</message>)", re.S)
 
 

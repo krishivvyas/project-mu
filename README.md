@@ -52,10 +52,12 @@ upstream Chromium already tests.
 | `0012` quiet address bar | The focused address bar gets a soft grey ring instead of a heavy white outline; other controls keep the high-contrast keyboard focus ring. |
 | `0013` rail mark | The active tab in the side rail carries Mu's red inkan mark; Mu's own theme no longer shows an "Installed theme… Undo" bar. The rail's "Tab groups" button starts unpinned (initial preferences). |
 | `0014` no sync promo, no colour | History never shows the "sync your history" promo; the secondary and tertiary palettes go grey too, so the inkan red is the only colour in Mu's UI. |
+| `0015` Incognito links | The Incognito and Guest pages' links are washi and underlined instead of Google blue. |
 
 The product name and logos are not patches: `build.py gen` copies the files in
 `branding/src/` (icons, logos, `BRANDING`) over the checkout and renames
-"Chromium" to "Project Mu" in the English interface strings, which keeps working
+"Chromium" to "Project Mu" in the English interface strings (browser, Settings,
+Incognito page, site info, security warnings, autofill and password dialogs), which keeps working
 when upstream edits those strings.
 
 **uBlock Origin Lite** is offered on the installer's Extensions page (ticked by
