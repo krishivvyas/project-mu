@@ -325,7 +325,10 @@ begin
     '  "history": { "saving_disabled": ' + JsonBool(not PrivacyPage.Values[PRIV_SAVE_HISTORY]) + ' },' + #13#10 +
     '  "search": { "suggest_enabled": ' + JsonBool(PrivacyPage.Values[PRIV_SUGGEST]) + ' },' + #13#10 +
     '  "vertical_tabs": { "enabled": ' + JsonBool(VerticalTabs) +
-    ', "collapsed_state": true, "expand_on_hover": true }' + #13#10 +
+    ', "collapsed_state": true, "expand_on_hover": true },' + #13#10 +
+    // The "Tab groups" button at the top of the rail starts unpinned; it can
+    // be pinned again from the tab strip's context menu.
+    '  "everything_menu": { "pinned_to_tabstrip": false }' + #13#10 +
     '}' + #13#10;
   if not SaveStringToFile(ExpandConstant('{app}\initial_preferences'), Json, False) then
     Log('could not write initial_preferences');

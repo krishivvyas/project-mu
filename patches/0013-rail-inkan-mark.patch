@@ -1,0 +1,54 @@
+Project Mu: inkan mark on the active tab, no theme-installed bar
+
+  * The active tab in the side rail carries Mu's inkan (seal red) mark, a
+    short rounded bar on its leading edge, so the current tab reads at a
+    glance in the collapsed rail.
+  * No "Installed theme ... Undo" bar for Mu's own Sumi theme. It is Mu's
+    look, loaded on every start by patch 0007, not something the user
+    installed; Undo would only strip it until the next start.
+
+diff --git a/chrome/browser/themes/theme_service.cc b/chrome/browser/themes/theme_service.cc
+index cc3523cb5c..feeb1d7afe 100644
+--- a/chrome/browser/themes/theme_service.cc
++++ b/chrome/browser/themes/theme_service.cc
+@@ -1185,8 +1185,11 @@ void ThemeService::OnThemeBuiltFromExtension(
+     can_revert_theme = DisableExtension(previous_theme_id.value());
+   }
+ 
+-  // Offer to revert to the old theme.
+-  if (can_revert_theme && !suppress_infobar && extension->is_theme()) {
++  // Offer to revert to the old theme. Project Mu: not for Mu's own Sumi
++  // theme (installer/mu-theme, loaded on every start by patch 0007): it is
++  // Mu's look, not something the user installed, and "Undo" would remove it.
++  if (can_revert_theme && !suppress_infobar && extension->is_theme() &&
++      extension->id() != "ebblimmanibebmhpoohlkjkblodlenhh") {
+     if (infobars::IsInfoBarMigrated(
+             infobars::InfoBarDelegate::THEME_INSTALLED_INFOBAR_DELEGATE)) {
+       ShowThemeInstalledInfoBar(profile_, extension->name(), extension->id(),
+diff --git a/chrome/browser/ui/views/tabs/common/vertical_tab_style_views.cc b/chrome/browser/ui/views/tabs/common/vertical_tab_style_views.cc
+index dd7a0a899f..a2cd6554e6 100644
+--- a/chrome/browser/ui/views/tabs/common/vertical_tab_style_views.cc
++++ b/chrome/browser/ui/views/tabs/common/vertical_tab_style_views.cc
+@@ -172,6 +172,22 @@ void VerticalTabStyleViews::PaintTabBackgroundFill(
+                            delegate_->GetView()->height() * scale);
+     }
+   }
++
++  // Project Mu: the active tab carries Mu's inkan (seal red) mark, a short
++  // rounded bar on its leading edge, instead of relying on a grey fill alone.
++  if (selection_state == TabStyle::TabSelectionState::kActive &&
++      GetSelectionState() == TabStyle::TabSelectionState::kActive) {
++    const gfx::Rect bounds = delegate_->GetView()->GetLocalBounds();
++    const float bar_width = 3 * scale;
++    const float bar_height = bounds.height() * 0.5f * scale;
++    const gfx::RectF bar(2 * scale,
++                         (bounds.height() * scale - bar_height) / 2,
++                         bar_width, bar_height);
++    cc::PaintFlags mark;
++    mark.setAntiAlias(true);
++    mark.setColor(SkColorSetRGB(0xDC, 0x26, 0x26));  // Mu inkan red
++    canvas->DrawRoundRect(bar, bar_width / 2, mark);
++  }
+ }
+ 
+ bool VerticalTabStyleViews::ShouldPaintTabBackgroundColor(

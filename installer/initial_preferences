@@ -32,5 +32,8 @@
     "enabled": true,
     "collapsed_state": true,
     "expand_on_hover": true
+  },
+  "everything_menu": {
+    "pinned_to_tabstrip": false
   }
 }
