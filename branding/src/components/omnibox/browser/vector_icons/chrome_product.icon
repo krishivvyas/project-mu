@@ -1,0 +1,8 @@
+// Project Mu's single-colour product mark (replaces Chromium's logo in the
+// address bar chip on internal pages, menus and infobars): an ensō, a brush
+// circle left open at the top right. Tinted by the UI like the original.
+
+CANVAS_DIMENSIONS, 24,
+STROKE, 2.6f,
+MOVE_TO, 18.13f, 6.86f,
+ARC_TO, 8, 8, 0, 1, 1, 14.74f, 4.48f

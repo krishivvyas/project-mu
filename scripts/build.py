@@ -424,10 +424,57 @@ def apply_branding(src: Path) -> None:
     log(f"branding: {changed} file(s) updated from {BRANDING_DIR.relative_to(REPO_ROOT)}")
 
 
-PRODUCT_STRINGS = Path("chrome") / "app" / "chromium_strings.grd"
-# "Chromium" as the product name; not ChromiumOS, the Chromium Authors or URLs.
-CHROMIUM_WORD = re.compile(r"\bChromium\b(?!\s?OS\b| Authors\b|\.org)")
+# The English product-name strings: the browser's, the Settings / About pages'
+# (a part of the first) and the shared components' (error pages, dialogs).
+# All of them set fallback_to_english, so other languages show the renamed
+# English text for the changed strings until they get translations.
+PRODUCT_STRINGS = [
+    Path("chrome") / "app" / "chromium_strings.grd",
+    Path("chrome") / "app" / "settings_chromium_strings.grdp",
+    Path("components") / "components_chromium_strings.grd",
+]
+# "Chromium" as the product name; not ChromiumOS, the Chromium Authors, URLs,
+# or the credit to the upstream project (the linked word in "made possible by
+# the Chromium open source project", About page and chrome://version).
+CHROMIUM_WORD = re.compile(
+    r'\bChromium\b(?!\s?OS\b| Authors\b|\.org|<ph name="END_LINK_CHROMIUM"| open source project)')
 GRD_MESSAGE = re.compile(r"(<message\b[^>]*>)(.*?)(</message>)", re.S)
+
+
+# English strings Mu words differently, by message name. Mu has no Google
+# account features, so the Settings headings that name Google say what the
+# pages hold. Same fallback_to_english rule as PRODUCT_STRINGS.
+STRING_OVERRIDES = {
+    Path("chrome") / "app" / "settings_strings.grdp": {
+        "IDS_SETTINGS_PEOPLE": "Profile",                           # "You and Google"
+        "IDS_SETTINGS_GOOGLE_SERVICES_PAGE_TITLE": "Services",      # "Google services"
+    },
+}
+
+
+def override_strings(src: Path) -> int:
+    """Replace the English text of the messages in STRING_OVERRIDES."""
+    changed = 0
+    for rel, messages in STRING_OVERRIDES.items():
+        path = src / rel
+        if not path.is_file():
+            log(f"string overrides: {rel} not found, skipped")
+            continue
+        text = path.read_bytes().decode("utf-8")
+        new_text = text
+        for name, wording in messages.items():
+            pattern = re.compile(
+                r'(<message name="' + re.escape(name) + r'"[^>]*>)(\s*)(.*?)(\s*</message>)', re.S)
+            m = pattern.search(new_text)
+            if not m:
+                log(f"string overrides: {name} not found in {rel}, skipped")
+                continue
+            if m.group(3) != wording:
+                new_text = new_text[:m.start(3)] + wording + new_text[m.end(3):]
+                changed += 1
+        if new_text != text:
+            path.write_bytes(new_text.encode("utf-8"))
+    return changed
 
 
 def rebrand_strings(src: Path) -> None:
@@ -438,20 +485,27 @@ def rebrand_strings(src: Path) -> None:
     Other languages fall back to English for the changed strings (the file
     sets fallback_to_english). Idempotent: an already renamed file is left
     as is, mtime included."""
-    path = src / PRODUCT_STRINGS
-    text = path.read_bytes().decode("utf-8")  # keep line endings as they are
-    count = 0
+    total = 0
+    for rel in PRODUCT_STRINGS:
+        path = src / rel
+        if not path.is_file():
+            log(f"product strings: {rel} not found, skipped")
+            continue
+        text = path.read_bytes().decode("utf-8")  # keep line endings as they are
+        count = 0
 
-    def rename(m: re.Match) -> str:
-        nonlocal count
-        body, n = CHROMIUM_WORD.subn("Project Mu", m.group(2))
-        count += n
-        return m.group(1) + body + m.group(3)
+        def rename(m: re.Match) -> str:
+            nonlocal count
+            body, n = CHROMIUM_WORD.subn("Project Mu", m.group(2))
+            count += n
+            return m.group(1) + body + m.group(3)
 
-    renamed = GRD_MESSAGE.sub(rename, text)
-    if count:
-        path.write_bytes(renamed.encode("utf-8"))
-    log(f"product strings: {count} 'Chromium' renamed to 'Project Mu'")
+        renamed = GRD_MESSAGE.sub(rename, text)
+        if count:
+            path.write_bytes(renamed.encode("utf-8"))
+        total += count
+    log(f"product strings: {total} 'Chromium' renamed to 'Project Mu', "
+        f"{override_strings(src)} message(s) reworded")
 
 
 def cmd_gen(args: argparse.Namespace) -> int:

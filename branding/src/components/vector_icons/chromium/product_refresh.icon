@@ -1,0 +1,14 @@
+// Project Mu's product mark (replaces Chromium's logo where the browser shows
+// its own icon, e.g. the address bar chip on internal pages): the red inkan
+// seal with an open washi ensō. Generated for Mu; same format as upstream.
+
+CANVAS_DIMENSIONS, 24,
+// Inkan red seal.
+PATH_COLOR_ARGB, 0xFF, 0xDC, 0x26, 0x26,
+ROUND_RECT, 1, 1, 22, 22, 5,
+NEW_PATH,
+// Washi ensō: a circle of radius 7 left open at the top right.
+PATH_COLOR_ARGB, 0xFF, 0xE2, 0xE8, 0xF0,
+STROKE, 2.2f,
+MOVE_TO, 17.36f, 7.5f,
+ARC_TO, 7, 7, 0, 1, 1, 14.39f, 5.42f
