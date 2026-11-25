@@ -37,3 +37,10 @@ enable_reporting = false
 proprietary_codecs = true
 ffmpeg_branding = "Chrome"
 enable_mse_mpeg2ts_stream_parser = true
+
+# --- No experimental field trials -------------------------------------------
+# Unbranded builds otherwise activate every study in Chromium's
+# testing/variations/fieldtrial_testing_config.json: hundreds of experiments,
+# including Gemini in Chrome (glic), contextual tasks and AI Mode. Mu ships
+# Chromium's defaults instead.
+disable_fieldtrial_testing_config = true

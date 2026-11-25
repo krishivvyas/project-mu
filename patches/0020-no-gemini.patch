@@ -1,0 +1,53 @@
+Project Mu: no Gemini in Chrome
+
+Glic (Gemini in Chrome) is Google's AI assistant that reads the pages you
+browse. It is on by default on Windows, and its component extension starts a
+background worker in every profile even without a Google account. Mu turns
+off both switches:
+
+  * kGlic, the feature's own kill switch: no Gemini button, hotkey, panel
+    or settings page.
+  * kApiGlicPrivate: the built-in glic component extension is not loaded and
+    its private API is not exposed.
+
+(args.gn also sets disable_fieldtrial_testing_config, so experimental
+studies such as contextual tasks and AI Mode stay at their defaults, off.)
+
+diff --git a/chrome/common/chrome_features.cc b/chrome/common/chrome_features.cc
+index 4e871ad..2ca39ca 100644
+--- a/chrome/common/chrome_features.cc
++++ b/chrome/common/chrome_features.cc
+@@ -525,14 +525,10 @@ BASE_FEATURE(kGlicMessageFirstFre, base::FEATURE_DISABLED_BY_DEFAULT);
+ // IMPORTANT: this feature should never be expired! It is used as the main
+ // kill-switch for Glic and can be used in the future to handle unsupported
+ // Chrome versions.
+-BASE_FEATURE(kGlic,
+-#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN) || BUILDFLAG(IS_CHROMEOS) || \
+-    BUILDFLAG(IS_ANDROID)
+-             base::FEATURE_ENABLED_BY_DEFAULT
+-#else
+-             base::FEATURE_DISABLED_BY_DEFAULT
+-#endif
+-);
++//
++// Project Mu: off everywhere. Glic is Gemini in Chrome, Google's AI assistant
++// that reads the pages you browse; it has no place in a private browser.
++BASE_FEATURE(kGlic, base::FEATURE_DISABLED_BY_DEFAULT);
+ 
+ BASE_FEATURE(kGlicBackgroundActuation, base::FEATURE_DISABLED_BY_DEFAULT);
+ 
+diff --git a/extensions/common/extension_features.cc b/extensions/common/extension_features.cc
+index d0f9ea3..77f97fa 100644
+--- a/extensions/common/extension_features.cc
++++ b/extensions/common/extension_features.cc
+@@ -31,7 +31,9 @@ BASE_FEATURE(kApiOdfsConfigPrivate, base::FEATURE_ENABLED_BY_DEFAULT);
+ 
+ BASE_FEATURE(kApiContextualTasksPrivate, base::FEATURE_DISABLED_BY_DEFAULT);
+ 
+-BASE_FEATURE(kApiGlicPrivate, base::FEATURE_ENABLED_BY_DEFAULT);
++// Project Mu: off, so Chromium's built-in glic (Gemini in Chrome) component
++// extension is not loaded and its API is not available.
++BASE_FEATURE(kApiGlicPrivate, base::FEATURE_DISABLED_BY_DEFAULT);
+ 
+ BASE_FEATURE(kApiEnterpriseReportingPrivateOnDataMaskingRulesTriggered,
+              base::FEATURE_ENABLED_BY_DEFAULT);

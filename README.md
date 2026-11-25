@@ -57,6 +57,7 @@ upstream Chromium already tests.
 | `0017` Kage | Mu's private window. Incognito is called **Kage** (影, shadow) throughout the interface; Kage windows are sumi-dark with their own mark (an inkan ensō around 影), and uBlock Origin Lite runs in them too. |
 | `0018` mu.exe | The browser ships as `mu.exe`. Chromium finds and checks its own executable by name (the renderer code-signing mitigation, Task Manager's sampling, notifications, web-app shortcuts, start at login), so those use Mu's name. |
 | `0019` quiet toolbar | Forward appears only after going back, the menu button is an ensō instead of three dots, there is no divider before it, and the address rests in the middle of the bar (it moves left while you edit). |
+| `0020` no Gemini | Gemini in Chrome (glic) is off: no AI assistant button, panel or background extension. `args.gn` also turns off Chromium's experimental field trials, so features like contextual tasks and AI Mode stay off. |
 
 The product name and logos are not patches: `build.py gen` copies the files in
 `branding/src/` (icons, logos, `BRANDING`) over the checkout and renames
