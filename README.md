@@ -419,7 +419,7 @@ like ink dissolving, not like "Closing 12 tabs…".
 | ✅ | `0007` Sumi theme and Mu New Tab page on every start; `0008` no API-key bar; `0009` no Chromium welcome screen |
 | ✅ | Side-rail (vertical) tabs by default; New Tab search box |
 | ✅ | `0019` quiet toolbar (Mu's own take on Chromium's toolbar) |
-| ⬜ | Windows setup wizard (Inno Setup) in a CI release |
+| ✅ | Windows setup wizard (Inno Setup) in a CI release |
 | ⬜ | First Android arm64 release |
 | ✅ | Sumi (dark, grayscale) theme by default; Washi (light) in the installer |
 | ✅ | Mu icons in the browser and the installer |
