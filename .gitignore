@@ -20,6 +20,9 @@ project-mu-*.apk
 *.keystore
 *.jks
 
+# Private setup notes (never commit)
+ANDROID-SIGNING-SETUP.txt
+
 # Python
 __pycache__/
 *.pyc
