@@ -423,12 +423,13 @@ like ink dissolving, not like "Closing 12 tabs…".
 | ⬜ | First Android arm64 release |
 | ✅ | Sumi (dark, grayscale) theme by default; Washi (light) in the installer |
 | ✅ | Mu icons in the browser and the installer |
-| ⬜ | Minimal New Tab page |
+| ✅ | Minimal New Tab page |
 | ✅ | Inkan "return to Mu" purge micro-interaction |
 | ✅ | `0010` no blue accents, no profile button; `0011` no registry extensions, no New Tab footer |
 | ✅ | Mu's name, icons and logos inside the browser (`branding/` overlay) |
 | ✅ | Optional uBlock Origin Lite in the installer |
 | ✅ | `0018` `mu.exe` instead of `chrome.exe` |
+| ✅ | `0020` no Gemini in Chrome (glic); experimental field trials off |
 
 ---
 
@@ -446,4 +447,3 @@ like ink dissolving, not like "Closing 12 tabs…".
 Project Mu's own code is released under the [MIT License](LICENSE). Chromium and
 its components keep their own licenses (BSD-style and others). Every build
 shows Chromium's full license notices at `chrome://credits`.
-# project-mu
