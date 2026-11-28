@@ -28,8 +28,9 @@ symbol_level = 0
 blink_symbol_level = 0
 v8_symbol_level = 0
 exclude_unwind_tables = true      # smaller libchrome.so; crash stacks are not collected anyway
-enable_vr = false                 # no VR / AR / Cardboard support code
-enable_arcore = false
+# enable_vr stays at its default: since Chromium 159, //chrome/browser/permissions
+# depends on //device/vr/public/cpp:features on Android, which asserts enable_vr.
+enable_arcore = false             # no AR / Cardboard support code
 enable_cardboard = false
 
 # --- No Google branding or Google services ---------------------------------
